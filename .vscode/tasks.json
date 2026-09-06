@@ -1,0 +1,45 @@
+{
+    "version": "2.0.0",
+    "options": {
+        "shell": {
+            "executable": "powershell.exe",
+            "args": ["-NoProfile", "-Command"]
+        }
+    },
+    "tasks": [
+        {
+            "label": "Firmware: Build",
+            "type": "shell",
+            "command": "$env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User'); . \"C:\\Users\\Yusuf Febri Andrian\\export-esp.ps1\"; . \"${workspaceFolder}\\firmware\\env.local.ps1\"; Set-Location \"${workspaceFolder}\\firmware\"; cargo build --release",
+            "problemMatcher": ["$rustc"],
+            "group": "build"
+        },
+        {
+            "label": "Firmware: Flash",
+            "type": "shell",
+            "command": "$env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User'); Set-Location \"${workspaceFolder}\\firmware\"; espflash flash --port COM5 target/xtensa-esp32s3-none-elf/release/coffee-enose-firmware",
+            "problemMatcher": []
+        },
+        {
+            "label": "Firmware: Build & Flash",
+            "dependsOrder": "sequence",
+            "dependsOn": ["Firmware: Build", "Firmware: Flash"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Firmware: Monitor Serial",
+            "type": "shell",
+            "command": "$env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User'); espflash monitor --port COM5",
+            "problemMatcher": [],
+            "isBackground": true
+        },
+        {
+            "label": "Firmware: Build & Flash & Monitor",
+            "dependsOrder": "sequence",
+            "dependsOn": ["Firmware: Build", "Firmware: Flash", "Firmware: Monitor Serial"]
+        }
+    ]
+}
