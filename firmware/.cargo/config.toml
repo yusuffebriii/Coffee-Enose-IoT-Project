@@ -1,0 +1,20 @@
+[build]
+target = "xtensa-esp32s3-none-elf"
+rustflags = ["-C", "link-arg=-Tlinkall.x", "-C", "link-arg=-nostartfiles"]
+
+[target.xtensa-esp32s3-none-elf]
+runner = "espflash flash --monitor --partition-table ./partitions.csv --erase-parts otadata"
+
+[env]
+ESP_LOG = "INFO"
+# WAJIB di-set sebelum build/flash, contoh (bash):
+#   export SSID=NamaWifiAnda
+#   export PASSWORD=PasswordWifiAnda
+#   export TB_HOST=thingsboard.cloud
+#   export TB_TOKEN=<access_token_device_dari_ThingsBoard>
+# atau (PowerShell):
+#   $env:SSID="NamaWifiAnda"; $env:PASSWORD="PasswordWifiAnda"
+#   $env:TB_HOST="thingsboard.cloud"; $env:TB_TOKEN="<access_token>"
+
+[unstable]
+build-std = ["core", "alloc"]
