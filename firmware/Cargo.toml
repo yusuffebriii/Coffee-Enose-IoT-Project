@@ -46,6 +46,7 @@ embassy-net = { version = "=0.7.0", features = [
     "dns",
 ] }
 embassy-futures = "0.1"
+embassy-sync = "0.6"
 
 rust-mqtt = { version = "=0.3.0", default-features = false }
 ads1x1x = "0.3"

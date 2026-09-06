@@ -44,6 +44,7 @@ use embassy_net::{
     tcp::TcpSocket,
     Config as EmbassyNetConfig, Runner, StackResources,
 };
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
 use esp_alloc as _;
 use esp_backtrace as _;
@@ -74,6 +75,20 @@ esp_bootloader_esp_idf::esp_app_desc!();
 const TB_PORT: u16 = 1883;
 
 const OTA_CHUNK_SIZE: usize = 4096;
+
+#[derive(Clone, Copy)]
+struct GasReading {
+    ch0: i16,
+    ch1: i16,
+    ch2: i16,
+    ch3: i16,
+}
+
+// Jembatan antara sensor_task (baca ADS1115 tiap 1 detik, jalan terus tidak
+// peduli status WiFi/MQTT) dan loop MQTT di main() yang publish tiap 5 detik.
+// Pakai Signal (bukan Channel) karena yang dibutuhkan cuma nilai TERBARU,
+// bukan antrian semua history.
+static READING: Signal<CriticalSectionRawMutex, GasReading> = Signal::new();
 
 macro_rules! mk_static {
     ($t:ty, $val:expr) => {{
@@ -115,46 +130,60 @@ async fn main(spawner: Spawner) -> ! {
     let timg1 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timg1.timer0);
 
+    // Sensor gas jalan independen dari WiFi/MQTT - tetap baca & log ke serial
+    // (baris "DATA,...") walau ThingsBoard/WiFi lagi bermasalah. Ini yang
+    // dipakai untuk logging lokal per-sampel kopi ke laptop (lihat
+    // tools/record_sample.ps1), sekaligus jadi sumber data buat dikirim ke
+    // ThingsBoard kalau MQTT connect.
+    spawner.spawn(sensor_task(i2c)).ok();
+
     // --- Konfigurasi WiFi/ThingsBoard: bisa diubah tanpa reflash lewat
     // wizard di serial monitor, tersimpan di flash. Kalau tidak ada input
     // dalam 3 detik, lanjut pakai config tersimpan (atau default dari
     // environment variable saat build kalau belum pernah disimpan). ---
-    let mut uart0 = Uart::new(peripherals.UART0, UartConfig::default()).unwrap();
+    // NB: method sinkron `uart.read()` di esp-hal ternyata BLOCK sampai ada
+    // byte masuk (bukan langsung balik 0 kalau FIFO kosong seperti dugaan
+    // awal, terbukti lewat testing di hardware). Makanya pakai `.into_async()`
+    // + `read_async()` (nama method async-nya beda dari yang sinkron, bukan
+    // lewat trait `.read().await`), supaya bisa di-race dengan timeout tanpa
+    // memblokir executor (termasuk sensor_task).
+    let mut uart0 = Uart::new(peripherals.UART0, UartConfig::default())
+        .unwrap()
+        .into_async();
     let mut flash = FlashStorage::new();
 
     esp_println::println!(
         "Tekan 'c' lalu Enter dalam 3 detik untuk ubah WiFi/ThingsBoard (skip = lanjut biasa)..."
     );
-    let mut trigger = false;
-    'wait_trigger: for _ in 0..300u32 {
-        let mut b = [0u8; 1];
-        if let Ok(n) = uart0.read(&mut b) {
-            if n > 0 && (b[0] == b'c' || b[0] == b'C') {
-                trigger = true;
-                break 'wait_trigger;
+    let trigger = embassy_time::with_timeout(Duration::from_secs(3), async {
+        loop {
+            let mut b = [0u8; 1];
+            if uart0.read_async(&mut b).await.is_ok() && (b[0] == b'c' || b[0] == b'C') {
+                return;
             }
         }
-        Timer::after(Duration::from_millis(10)).await;
-    }
+    })
+    .await
+    .is_ok();
 
     if trigger {
         esp_println::println!("");
         esp_println::println!("=== Wizard Konfigurasi WiFi/ThingsBoard ===");
 
         esp_println::println!("Nama WiFi (SSID): ");
-        let ssid = read_line(&mut uart0);
+        let ssid = read_line(&mut uart0).await;
         esp_println::println!("");
 
         esp_println::println!("Password WiFi: ");
-        let password = read_line(&mut uart0);
+        let password = read_line(&mut uart0).await;
         esp_println::println!("");
 
         esp_println::println!("Host ThingsBoard (mis. thingsboard.cloud): ");
-        let tb_host = read_line(&mut uart0);
+        let tb_host = read_line(&mut uart0).await;
         esp_println::println!("");
 
         esp_println::println!("Access token ThingsBoard: ");
-        let tb_token = read_line(&mut uart0);
+        let tb_token = read_line(&mut uart0).await;
         esp_println::println!("");
 
         let mut new_cfg = DeviceConfig {
@@ -211,13 +240,6 @@ async fn main(spawner: Spawner) -> ! {
             break;
         }
         Timer::after(Duration::from_millis(500)).await;
-    }
-
-    // ADS1115 (dipakai sinkron/blocking di tengah loop async - untuk sensor
-    // ber-sample-rate rendah ini cukup aman, tidak menahan executor lama).
-    let mut adc = Ads1x1x::new_ads1115(i2c, TargetAddr::default());
-    if adc.set_full_scale_range(FullScaleRange::Within4_096V).is_err() {
-        warn!("Gagal set full scale range ADS1115 (cek wiring/alamat I2C)");
     }
 
     let mut rx_buffer = [0u8; 4096];
@@ -294,29 +316,29 @@ async fn main(spawner: Spawner) -> ! {
 
             match select3(publish_tick, ping_tick, incoming).await {
                 Either3::First(()) => {
-                    // Baca 4 channel ADS1115 dan kirim sebagai telemetry JSON.
-                    let ch0 = block!(adc.read(channel::SingleA0)).unwrap_or(0);
-                    let ch1 = block!(adc.read(channel::SingleA1)).unwrap_or(0);
-                    let ch2 = block!(adc.read(channel::SingleA2)).unwrap_or(0);
-                    let ch3 = block!(adc.read(channel::SingleA3)).unwrap_or(0);
+                    // Ambil bacaan sensor TERBARU dari sensor_task (independen
+                    // dari loop ini). Kalau belum ada bacaan sama sekali
+                    // (baru banget boot), skip publish ronde ini saja.
+                    if let Some(reading) = READING.try_take() {
+                        let mut payload: HString<128> = HString::new();
+                        let _ = write!(
+                            payload,
+                            "{{\"gas_ch0\":{},\"gas_ch1\":{},\"gas_ch2\":{},\"gas_ch3\":{}}}",
+                            reading.ch0, reading.ch1, reading.ch2, reading.ch3
+                        );
 
-                    let mut payload: HString<128> = HString::new();
-                    let _ = write!(
-                        payload,
-                        "{{\"gas_ch0\":{ch0},\"gas_ch1\":{ch1},\"gas_ch2\":{ch2},\"gas_ch3\":{ch3}}}"
-                    );
-
-                    if let Err(e) = client
-                        .send_message(
-                            "v1/devices/me/telemetry",
-                            payload.as_bytes(),
-                            QualityOfService::QoS0,
-                            false,
-                        )
-                        .await
-                    {
-                        error!("Publish telemetry gagal: {:?}", e);
-                        break 'session;
+                        if let Err(e) = client
+                            .send_message(
+                                "v1/devices/me/telemetry",
+                                payload.as_bytes(),
+                                QualityOfService::QoS0,
+                                false,
+                            )
+                            .await
+                        {
+                            error!("Publish telemetry gagal: {:?}", e);
+                            break 'session;
+                        }
                     }
                 }
                 Either3::Second(()) => {
@@ -361,15 +383,11 @@ async fn main(spawner: Spawner) -> ! {
 
 /// Baca satu baris teks dari UART (blocking), sampai user tekan Enter.
 /// Mendukung backspace sederhana. Dipakai wizard konfigurasi WiFi/ThingsBoard.
-fn read_line(uart: &mut Uart<'_, esp_hal::Blocking>) -> HString<64> {
+async fn read_line(uart: &mut Uart<'_, esp_hal::Async>) -> HString<64> {
     let mut buf: HString<64> = HString::new();
     loop {
         let mut b = [0u8; 1];
-        let n = match uart.read(&mut b) {
-            Ok(n) => n,
-            Err(_) => 0,
-        };
-        if n == 0 {
+        if uart.read_async(&mut b).await.is_err() {
             continue;
         }
         match b[0] {
@@ -382,7 +400,7 @@ fn read_line(uart: &mut Uart<'_, esp_hal::Blocking>) -> HString<64> {
                 buf.pop();
             }
             byte => {
-                let _ = uart.write(&[byte]);
+                let _ = uart.write_async(&[byte]).await;
                 let _ = buf.push(byte as char);
             }
         }
@@ -462,4 +480,29 @@ async fn connection(mut controller: WifiController<'static>, device_cfg: &'stati
 #[embassy_executor::task]
 async fn net_task(mut runner: Runner<'static, WifiDevice<'static>>) {
     runner.run().await
+}
+
+/// Baca ADS1115 tiap 1 detik, cetak ke serial (baris "DATA,ch0,ch1,ch2,ch3")
+/// dan simpan ke `READING` buat dikirim MQTT kalau connect. Task ini TIDAK
+/// bergantung sama sekali ke WiFi/MQTT - tetap jalan walau keduanya gagal,
+/// supaya logging lokal per-sampel kopi (lihat tools/record_sample.ps1)
+/// tidak ikut kena dampak masalah jaringan/cloud.
+#[embassy_executor::task]
+async fn sensor_task(i2c: I2c<'static, esp_hal::Blocking>) {
+    let mut adc = Ads1x1x::new_ads1115(i2c, TargetAddr::default());
+    if adc.set_full_scale_range(FullScaleRange::Within4_096V).is_err() {
+        warn!("Gagal set full scale range ADS1115 (cek wiring/alamat I2C)");
+    }
+
+    loop {
+        let ch0 = block!(adc.read(channel::SingleA0)).unwrap_or(0);
+        let ch1 = block!(adc.read(channel::SingleA1)).unwrap_or(0);
+        let ch2 = block!(adc.read(channel::SingleA2)).unwrap_or(0);
+        let ch3 = block!(adc.read(channel::SingleA3)).unwrap_or(0);
+
+        esp_println::println!("DATA,{ch0},{ch1},{ch2},{ch3}");
+        READING.signal(GasReading { ch0, ch1, ch2, ch3 });
+
+        Timer::after(Duration::from_secs(1)).await;
+    }
 }
