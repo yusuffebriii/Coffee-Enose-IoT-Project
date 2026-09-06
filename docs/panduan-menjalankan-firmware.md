@@ -106,22 +106,27 @@ shell yang sedang aktif.)
 cargo install espflash --locked
 ```
 
-## 4. Menyiapkan Environment Variable
+## 4. Menyiapkan Konfigurasi WiFi/ThingsBoard
 
-Firmware butuh 4 informasi rahasia yang **tidak ditulis di source code**
-(supaya tidak ke-commit ke git), tapi di-inject saat compile lewat environment
-variable:
+Firmware butuh 4 informasi: SSID WiFi, password WiFi, host ThingsBoard, dan
+access token. Ini **tidak ditulis di source code** (supaya tidak ke-commit ke
+git), tapi dibaca dari file teks biasa saat compile lewat `build.rs`:
 
-```powershell
-$env:SSID = "nama_wifi_anda"
-$env:PASSWORD = "password_wifi_anda"
-$env:TB_HOST = "thingsboard.cloud"
-$env:TB_TOKEN = "access_token_dari_langkah_2.4"
-```
+1. Copy `firmware/wifi_config.example.txt` jadi `firmware/wifi_config.txt`.
+2. Buka `wifi_config.txt` di VS Code, isi:
+   ```
+   SSID=nama_wifi_anda
+   PASSWORD=password_wifi_anda
+   TB_HOST=thingsboard.cloud
+   TB_TOKEN=access_token_dari_langkah_2.4
+   ```
+3. Save. File `wifi_config.txt` di-`.gitignore` (tidak ke-commit).
 
 > WiFi **wajib** band 2.4GHz — ESP32-S3 tidak mendukung WiFi 5GHz.
-> Variable ini hanya berlaku untuk sesi PowerShell yang sedang aktif; kalau buka
-> terminal baru harus di-set ulang.
+> `build.rs` otomatis membaca file ini setiap `cargo build`, jadi tidak perlu
+> set environment variable manual lagi seperti versi awal dulu. Nilai ini
+> juga bisa diganti belakangan **tanpa reflash** lewat wizard serial — lihat
+> Bagian 7.1.
 
 ## 5. Build Firmware
 
@@ -206,6 +211,24 @@ Tekan `Ctrl+C` untuk keluar dari monitor (**bukan** menutup power board).
 >     "esp32s3", "uart", "log-04", "colors", "critical-section",
 > ] }
 > ```
+> Catatan tambahan: bahkan setelah fix ini, log lewat macro `log::info!`/
+> `error!` masih belum pernah kelihatan di serial monitor manapun (beda
+> dengan `esp_println::println!` langsung yang selalu tampil) — root cause-nya
+> belum ditelusuri, tapi tidak mempengaruhi fungsi (telemetry tetap terkirim,
+> dibuktikan lewat dashboard ThingsBoard, bukan lewat log).
+
+### 7.1 Ganti WiFi/ThingsBoard tanpa reflash (wizard serial)
+
+1. Jalankan `espflash monitor --port COM5`, lalu reset board (tekan tombol
+   reset di board, atau colok ulang USB).
+2. Dalam 3 detik setelah boot, muncul prompt: `Tekan 'c' lalu Enter dalam 3
+   detik untuk ubah WiFi/ThingsBoard...` — ketik `c` lalu Enter.
+3. Ikuti 4 prompt yang muncul: SSID, password, host ThingsBoard, access token.
+4. Device otomatis menyimpan input itu ke flash internal (bukan ke
+   `wifi_config.txt`) lalu reboot dan langsung pakai config baru.
+
+Config di flash ini **menang/override** dibanding `wifi_config.txt` selama
+belum di-erase. Implementasinya ada di [`src/config.rs`](../firmware/src/config.rs).
 
 ## 8. Verifikasi Data Masuk ke ThingsBoard
 
@@ -228,7 +251,9 @@ Ringkasan masalah yang muncul saat pertama kali mencoba, dan cara mengatasinya
 | 3 | `error[E0432]: unresolved import 'ads1x1x::SlaveAddr'` | Nama tipe berubah antar versi crate `ads1x1x` — di versi 0.3.0 namanya `TargetAddr`, bukan `SlaveAddr` | Ganti semua pemakaian `SlaveAddr` jadi `TargetAddr` |
 | 4 | Linker error puluhan baris "undefined reference to `strcpy`/`g_osi_funcs_p`/dst" dari `libnet80211.a`/`libphy.a`/`libpp.a` (blob C milik driver WiFi) | `.cargo/config.toml` belum punya `rustflags` linker script yang benar (`-Tlinkall.x`, `-nostartfiles`) yang dibutuhkan `esp-wifi` untuk menyatukan seluruh symbol driver WiFi | Tambah `rustflags = ["-C", "link-arg=-Tlinkall.x", "-C", "link-arg=-nostartfiles"]` |
 | 5 | Firmware sukses flash & terbukti kirim data ke ThingsBoard, tapi `espflash monitor` tidak menampilkan log apapun | `esp-println` default pakai output USB-Serial-JTAG, bukan UART yang dipantau lewat COM5 | Set fitur `esp-println` eksplisit ke `"uart"` |
-| 6 | Device sempat "Online" ±5 menit lalu jadi "Offline" di ThingsBoard | Diduga MQTT keep-alive tidak terjaga (crate `rust-mqtt` tidak otomatis kirim PINGREQ periodik) — **masih dalam investigasi**, lihat bagian Batasan & PR di bawah | — |
+| 6 | Device sempat "Online" ±5 menit lalu jadi "Offline" di ThingsBoard | MQTT keep-alive tidak terjaga — crate `rust-mqtt` tidak otomatis kirim PINGREQ periodik (`keep_alive` default 60 detik di `ClientConfig`, harus dipanggil manual) | Tambah `client.send_ping()` tiap 20 detik di loop utama (`select3` dengan publish tick + ping tick + incoming message) |
+| 7 | `error: failed to run custom build command for esp-hal` — "The `unstable` feature is required by a dependent crate but is not enabled" (muncul lagi setelah eksperimen tambah `esp-hal-ota`/`esp-storage` versi terbaru) | Sama seperti #1: versi terbaru `esp-hal-ota`/`esp-storage` minta `esp-hal` ~1.2.0-rc.0, sementara `esp-wifi` masih di `esp-hal` 1.0.0-beta.1 | Pin `esp-storage` ke versi lama (`=0.4.0`) yang tidak menarik PAC `esp32s3` baru — dites clean tanpa `esp-hal-ota` sekalian |
+| 8 | Wizard config sukses simpan ke flash, tapi panic saat mau reboot: "schedule_wake called before esp_hal_embassy::init()" | `Timer::after().await` (embassy) dipakai di wizard SEBELUM `esp_hal_embassy::init(timg1.timer0)` dipanggil (posisinya waktu itu ada di bawah, setelah blok wizard) | Pindahkan `esp_hal_embassy::init(...)` ke atas, sebelum blok wizard/UART, supaya semua `Timer::after` di bawahnya valid |
 
 ## 10. Batasan yang Masih Ada (jujurkan ke dosen kalau ditanya)
 
@@ -237,26 +262,27 @@ Ringkasan masalah yang muncul saat pertama kali mencoba, dan cara mengatasinya
   dari ThingsBoard), tapi bagian menulis firmware baru ke flash belum aktif —
   akan diaktifkan lagi setelah crate `esp-hal-ota` dan `esp-wifi` berada di
   generasi versi `esp-hal` yang sama (saat ini masih bentrok, lihat tabel #1 di atas).
-- **Koneksi MQTT bisa terputus setelah beberapa menit** kalau tidak ada mekanisme
-  keep-alive/ping yang berjalan — ini sedang diselidiki dan diperbaiki.
+- Log lewat macro `log::info!`/`error!` belum kelihatan di serial monitor
+  (lihat catatan di Bagian 7) — bukan bug fungsional, tapi menyulitkan debug
+  lewat serial. Kalau perlu debug, andalkan `esp_println::println!` langsung
+  atau cek data di dashboard ThingsBoard sebagai ground truth.
 - Ekosistem Rust untuk ESP32 (`esp-hal`) masih berstatus **beta/rc** (belum versi
   1.0 stabil), jadi kombinasi versi antar crate bisa berubah dan butuh
-  penyesuaian dari waktu ke waktu.
+  penyesuaian dari waktu ke waktu (lihat tabel #1 dan #7 di atas sebagai contoh).
 
 ## 11. Perintah Ringkas (cheat sheet)
 
-Setelah toolchain ter-install (langkah 3 hanya sekali), untuk build+flash+monitor
-ulang cukup:
+Setelah toolchain ter-install dan `firmware/wifi_config.txt` sudah diisi
+(langkah 3 & 4, sekali saja), untuk build+flash+monitor ulang cukup:
 
 ```powershell
 . "C:\Users\<user>\export-esp.ps1"
-$env:SSID = "nama_wifi"
-$env:PASSWORD = "password_wifi"
-$env:TB_HOST = "thingsboard.cloud"
-$env:TB_TOKEN = "access_token_device"
-
 cd "PROJECT_COFFEE_ENOSE\firmware"
 cargo build --release
 espflash flash --port COM5 target/xtensa-esp32s3-none-elf/release/coffee-enose-firmware
 espflash monitor --port COM5
 ```
+
+Atau lewat VS Code: tekan **Ctrl+Shift+B** (jalankan task "Firmware: Build &
+Flash" — lihat [`.vscode/tasks.json`](../.vscode/tasks.json)), tidak perlu
+ketik perintah manual sama sekali.

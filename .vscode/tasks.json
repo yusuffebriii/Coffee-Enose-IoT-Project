@@ -10,7 +10,7 @@
         {
             "label": "Firmware: Build",
             "type": "shell",
-            "command": "$env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User'); . \"C:\\Users\\Yusuf Febri Andrian\\export-esp.ps1\"; . \"${workspaceFolder}\\firmware\\env.local.ps1\"; Set-Location \"${workspaceFolder}\\firmware\"; cargo build --release",
+            "command": "$env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User'); . \"C:\\Users\\Yusuf Febri Andrian\\export-esp.ps1\"; Set-Location \"${workspaceFolder}\\firmware\"; cargo build --release",
             "problemMatcher": ["$rustc"],
             "group": "build"
         },

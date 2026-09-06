@@ -7,14 +7,9 @@ runner = "espflash flash --monitor --partition-table ./partitions.csv --erase-pa
 
 [env]
 ESP_LOG = "INFO"
-# WAJIB di-set sebelum build/flash, contoh (bash):
-#   export SSID=NamaWifiAnda
-#   export PASSWORD=PasswordWifiAnda
-#   export TB_HOST=thingsboard.cloud
-#   export TB_TOKEN=<access_token_device_dari_ThingsBoard>
-# atau (PowerShell):
-#   $env:SSID="NamaWifiAnda"; $env:PASSWORD="PasswordWifiAnda"
-#   $env:TB_HOST="thingsboard.cloud"; $env:TB_TOKEN="<access_token>"
+# SSID/PASSWORD/TB_HOST/TB_TOKEN TIDAK di-set di sini lagi - diambil
+# otomatis oleh build.rs dari file firmware/wifi_config.txt (copy dari
+# wifi_config.example.txt). Edit file itu langsung, tidak perlu env var.
 
 [unstable]
 build-std = ["core", "alloc"]
