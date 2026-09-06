@@ -8,6 +8,9 @@ Cara pakai:
     .\record_sample.ps1 -SampleName "arabika_gayo_1"
     .\record_sample.ps1 -SampleName "robusta_lampung_2" -Port COM5 -DurationSeconds 60
 
+Kalau -Port tidak diisi, script otomatis cari port ESP32-S3 (nomor COM-nya
+suka berubah-ubah tiap dicabut/dicolok ulang di Windows).
+
 Tekan Ctrl+C buat berhenti kapan saja (durasi opsional, default tanpa batas).
 Hasil disimpan ke 01_raw_data/<SampleName>_<timestamp>.csv
 #>
@@ -15,13 +18,36 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$SampleName,
 
-    [string]$Port = "COM5",
+    # Kosongkan supaya otomatis dideteksi
+    [string]$Port = "",
 
     # 0 = rekam terus sampai Ctrl+C ditekan manual
     [int]$DurationSeconds = 0
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($Port)) {
+    # CH343 (VID_1A86) = kabel USB-UART bridge, native USB Espressif
+    # (VID_303A) = port USB langsung ke chip. Salah satunya biasanya ESP32-S3.
+    $candidate = Get-PnpDevice -Class Ports -PresentOnly |
+        Where-Object { $_.InstanceId -match 'VID_1A86|VID_303A' } |
+        Select-Object -First 1
+
+    if (-not $candidate) {
+        Write-Host "Tidak ketemu port ESP32-S3 otomatis. Port yang tersedia sekarang:"
+        Get-PnpDevice -Class Ports -PresentOnly | Format-Table FriendlyName, InstanceId -AutoSize
+        throw "Colok ESP32-S3 dulu, atau isi manual lewat -Port COMx"
+    }
+
+    if ($candidate.FriendlyName -match '\((COM\d+)\)') {
+        $Port = $matches[1]
+        Write-Host "Port terdeteksi otomatis: $Port ($($candidate.FriendlyName))"
+    }
+    else {
+        throw "Gagal membaca nomor COM dari: $($candidate.FriendlyName). Isi manual lewat -Port COMx"
+    }
+}
 
 $rawDataDir = Join-Path $PSScriptRoot "..\..\01_raw_data"
 $rawDataDir = (Resolve-Path $rawDataDir).Path
