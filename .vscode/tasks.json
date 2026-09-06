@@ -10,14 +10,14 @@
         {
             "label": "Firmware: Build",
             "type": "shell",
-            "command": "$env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User'); . \"C:\\Users\\Yusuf Febri Andrian\\export-esp.ps1\"; Set-Location \"${workspaceFolder}\\firmware\"; cargo build --release",
+            "command": "$env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User'); . 'C:\\Users\\Yusuf Febri Andrian\\export-esp.ps1'; Set-Location -LiteralPath '${workspaceFolder}\\firmware'; cargo build --release",
             "problemMatcher": ["$rustc"],
             "group": "build"
         },
         {
             "label": "Firmware: Flash",
             "type": "shell",
-            "command": "$env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User'); Set-Location \"${workspaceFolder}\\firmware\"; espflash flash --port COM5 target/xtensa-esp32s3-none-elf/release/coffee-enose-firmware",
+            "command": "$env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User'); Set-Location -LiteralPath '${workspaceFolder}\\firmware'; espflash flash --port COM5 target/xtensa-esp32s3-none-elf/release/coffee-enose-firmware",
             "problemMatcher": []
         },
         {
