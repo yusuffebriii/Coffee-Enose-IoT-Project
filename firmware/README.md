@@ -14,14 +14,21 @@ Firmware Rust (`no_std`, esp-hal + embassy) untuk ESP32-S3 yang:
 > flash — lihat komentar `TODO OTA` di [`src/main.rs`](src/main.rs) untuk
 > alasannya (konflik versi `esp-hal` antara `esp-wifi` dan `esp-hal-ota`).
 >
-> **PENTING soal ganti WiFi:** config WiFi/ThingsBoard yang tersimpan di
-> flash internal (lewat wizard serial) **SELALU MENANG** dibanding
-> `wifi_config.txt`, walau sudah build & flash ulang berkali-kali. Kalau
-> sudah pernah jalankan wizard sekali dan sekarang mau ganti WiFi, **wajib
-> jalankan wizard lagi** (edit `wifi_config.txt` saja TIDAK CUKUP dan
-> TIDAK KELIHATAN EFEKNYA) — lihat Bagian "Ganti WiFi/ThingsBoard tanpa
-> reflash" di bawah. Ini penyebab bingung berjam-jam saat debugging WiFi
-> yang "gagal terus padahal sudah ganti config".
+> **Soal ganti WiFi:** ada 2 cara, dan keduanya sekarang saling konsisten
+> (fix 2026-09-11, lihat [`src/config.rs`](src/config.rs)):
+> - **Edit `wifi_config.txt` + build & flash ulang** → otomatis kepakai,
+>   tidak perlu wizard lagi (firmware mendeteksi file itu berubah lewat
+>   hash, lalu menimpa config lama di flash).
+> - **Wizard serial** (tanpa reflash, lihat bagian di bawah) → tetap
+>   berguna buat yang tidak punya laptop dev/toolchain (mis. teman yang
+>   cuma pegang board-nya). Hasil wizard tetap tersimpan selama
+>   `wifi_config.txt` tidak diubah+reflash lagi setelahnya.
+>
+> Sebelum fix ini, config hasil wizard SELALU menang dibanding
+> `wifi_config.txt` selamanya (walau sudah reflash berkali-kali) — itu
+> penyebab bingung berjam-jam waktu debugging. Kalau nemu firmware versi
+> lama tanpa fix ini, edit file doang tidak akan kelihatan efeknya, wajib
+> jalankan wizard.
 
 ## Bagian 1 — Setup ThingsBoard Cloud
 
@@ -109,9 +116,9 @@ Ganti `COM5` sesuai port board Anda (cek lewat
 3. Ikuti 4 prompt (SSID, password, host ThingsBoard, access token).
 4. Device otomatis simpan ke flash internal & reboot pakai config baru.
 
-Config yang tersimpan di flash ini **override** nilai di `wifi_config.txt`.
-Kalau mau reset ke nilai file lagi, jalankan wizard ulang dengan isian yang
-sama seperti file, atau `espflash erase-flash` (lalu flash ulang dari awal).
+Config hasil wizard ini dipakai terus selama `wifi_config.txt` tidak diubah.
+Begitu `wifi_config.txt` diedit dan di-build+flash ulang, nilai barunya
+otomatis menang lagi (lihat catatan di bagian atas).
 
 ## Output telemetry
 
