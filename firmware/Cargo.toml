@@ -52,6 +52,7 @@ rust-mqtt = { version = "=0.3.0", default-features = false }
 ads1x1x = "0.3"
 embedded-hal = "1.0"
 embedded-hal-async = "1.0.0"
+embedded-hal-bus = "0.1"
 
 log = "0.4.27"
 nb = "1.0.0"

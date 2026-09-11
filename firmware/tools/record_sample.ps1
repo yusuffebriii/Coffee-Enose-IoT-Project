@@ -1,12 +1,15 @@
 <#
-Rekam data sensor gas (ADS1115) dari ESP32-S3 ke file CSV, satu file per
-sesi sampel kopi. Firmware harus sudah ter-flash dan mencetak baris
-"DATA,ch0,ch1,ch2,ch3" ke serial (lihat sensor_task di src/main.rs) -
-ini jalan independen dari status WiFi/ThingsBoard.
+Rekam data 8 sensor gas (MQ-3, MQ-6, MQ-7, MQ-135, TGS2600, TGS2602,
+TGS2611, TGS2620 - lewat 2x ADS1115) dari ESP32-S3 ke file CSV, satu file
+per percobaan. Firmware harus sudah ter-flash dan mencetak baris
+"DATA,mq3,mq6,mq7,mq135,tgs2600,tgs2602,tgs2611,tgs2620" ke serial (lihat
+sensor_task di src/main.rs) - ini jalan independen dari status WiFi/ThingsBoard.
 
-Cara pakai:
-    .\record_sample.ps1 -SampleName "arabika_gayo_1"
-    .\record_sample.ps1 -SampleName "robusta_lampung_2" -Port COM5 -DurationSeconds 60
+Skenario: 10x percobaan, masing-masing 100 gram kopi, direkam 300 detik.
+
+Cara pakai (nama percobaan bebas, mis. sertakan nomor & jenis kopi):
+    .\record_sample.ps1 -SampleName "arabika_gayo_percobaan_1"
+    .\record_sample.ps1 -SampleName "robusta_lampung_percobaan_2" -Port COM5 -DurationSeconds 300
 
 Kalau -Port tidak diisi, script otomatis cari port ESP32-S3 (nomor COM-nya
 suka berubah-ubah tiap dicabut/dicolok ulang di Windows).
@@ -56,7 +59,7 @@ $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $safeSampleName = $SampleName -replace '[^a-zA-Z0-9_\-]', '_'
 $outFile = Join-Path $rawDataDir "$safeSampleName`_$timestamp.csv"
 
-"timestamp,gas_ch0,gas_ch1,gas_ch2,gas_ch3" | Out-File -FilePath $outFile -Encoding utf8
+"timestamp,mq3,mq6,mq7,mq135,tgs2600,tgs2602,tgs2611,tgs2620" | Out-File -FilePath $outFile -Encoding utf8
 
 $serialPort = New-Object System.IO.Ports.SerialPort $Port, 115200, ([System.IO.Ports.Parity]::None), 8, ([System.IO.Ports.StopBits]::One)
 $serialPort.NewLine = "`n"

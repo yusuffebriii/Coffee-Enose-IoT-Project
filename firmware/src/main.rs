@@ -17,7 +17,18 @@
 // input, dipakai config tersimpan sebelumnya atau default dari environment
 // variable saat build.
 //
+// Array 8 sensor gas (MQ-3, MQ-6, MQ-7, MQ-135, TGS2600, TGS2602, TGS2611,
+// TGS2620) dibaca lewat DUA modul ADS1115 di bus I2C yang sama (alamat 0x48
+// default/ADDR->GND untuk 4 sensor pertama, 0x49/ADDR->VDD untuk 4 sensor
+// kedua) - lihat sensor_task. INI ASUMSI STANDAR, BELUM DIVERIFIKASI KE
+// HARDWARE ASLI karena rangkaiannya belum dirakit saat kode ini ditulis.
+// Begitu wiring fisik sudah jadi, cek ulang: alamat I2C tiap modul (pin
+// ADDR), urutan sensor per channel A0-A3, dan FullScaleRange sesuai rentang
+// tegangan output masing-masing sensor.
+//
 // TODO sebelum dipakai di hardware:
+//  - VERIFIKASI wiring 2x ADS1115 di atas begitu hardware dirakit (alamat
+//    I2C, urutan sensor per channel).
 //  - Sesuaikan pin I2C (SDA/SCL) untuk ADS1115 dengan wiring board Anda.
 //  - Sesuaikan FullScaleRange ADS1115 dengan rentang tegangan output sensor.
 //  - Set env var SSID, PASSWORD, TB_HOST, TB_TOKEN sebelum build (dipakai
@@ -36,6 +47,8 @@ mod config;
 use core::fmt::Write as _;
 
 use ads1x1x::{channel, Ads1x1x, FullScaleRange, TargetAddr};
+use core::cell::RefCell;
+use embedded_hal_bus::i2c::RefCellDevice;
 use config::DeviceConfig;
 use embassy_executor::Spawner;
 use embassy_futures::select::{select3, Either3};
@@ -78,10 +91,14 @@ const OTA_CHUNK_SIZE: usize = 4096;
 
 #[derive(Clone, Copy)]
 struct GasReading {
-    ch0: i16,
-    ch1: i16,
-    ch2: i16,
-    ch3: i16,
+    mq3: i16,
+    mq6: i16,
+    mq7: i16,
+    mq135: i16,
+    tgs2600: i16,
+    tgs2602: i16,
+    tgs2611: i16,
+    tgs2620: i16,
 }
 
 // Jembatan antara sensor_task (baca ADS1115 tiap 1 detik, jalan terus tidak
@@ -320,11 +337,18 @@ async fn main(spawner: Spawner) -> ! {
                     // dari loop ini). Kalau belum ada bacaan sama sekali
                     // (baru banget boot), skip publish ronde ini saja.
                     if let Some(reading) = READING.try_take() {
-                        let mut payload: HString<128> = HString::new();
+                        let mut payload: HString<192> = HString::new();
                         let _ = write!(
                             payload,
-                            "{{\"gas_ch0\":{},\"gas_ch1\":{},\"gas_ch2\":{},\"gas_ch3\":{}}}",
-                            reading.ch0, reading.ch1, reading.ch2, reading.ch3
+                            "{{\"mq3\":{},\"mq6\":{},\"mq7\":{},\"mq135\":{},\"tgs2600\":{},\"tgs2602\":{},\"tgs2611\":{},\"tgs2620\":{}}}",
+                            reading.mq3,
+                            reading.mq6,
+                            reading.mq7,
+                            reading.mq135,
+                            reading.tgs2600,
+                            reading.tgs2602,
+                            reading.tgs2611,
+                            reading.tgs2620
                         );
 
                         if let Err(e) = client
@@ -482,26 +506,56 @@ async fn net_task(mut runner: Runner<'static, WifiDevice<'static>>) {
     runner.run().await
 }
 
-/// Baca ADS1115 tiap 1 detik, cetak ke serial (baris "DATA,ch0,ch1,ch2,ch3")
-/// dan simpan ke `READING` buat dikirim MQTT kalau connect. Task ini TIDAK
-/// bergantung sama sekali ke WiFi/MQTT - tetap jalan walau keduanya gagal,
-/// supaya logging lokal per-sampel kopi (lihat tools/record_sample.ps1)
-/// tidak ikut kena dampak masalah jaringan/cloud.
+/// Baca 8 sensor gas (2x ADS1115 di bus I2C yang sama, alamat 0x48 & 0x49)
+/// tiap 1 detik, cetak ke serial (baris
+/// "DATA,mq3,mq6,mq7,mq135,tgs2600,tgs2602,tgs2611,tgs2620") dan simpan ke
+/// `READING` buat dikirim MQTT kalau connect. Task ini TIDAK bergantung sama
+/// sekali ke WiFi/MQTT - tetap jalan walau keduanya gagal, supaya logging
+/// lokal per-percobaan (lihat tools/record_sample.ps1) tidak ikut kena
+/// dampak masalah jaringan/cloud.
+///
+/// PERINGATAN: wiring 2 modul ADS1115 ini (alamat 0x48/0x49 lewat pin ADDR)
+/// belum pernah diverifikasi ke hardware asli - sesuaikan begitu rangkaian
+/// fisiknya jadi (lihat catatan TODO di kepala file).
 #[embassy_executor::task]
 async fn sensor_task(i2c: I2c<'static, esp_hal::Blocking>) {
-    let mut adc = Ads1x1x::new_ads1115(i2c, TargetAddr::default());
-    if adc.set_full_scale_range(FullScaleRange::Within4_096V).is_err() {
-        warn!("Gagal set full scale range ADS1115 (cek wiring/alamat I2C)");
+    let i2c_bus = RefCell::new(i2c);
+
+    // Modul #1 (ADDR->GND, alamat default 0x48): MQ-3, MQ-6, MQ-7, MQ-135.
+    let mut adc_a = Ads1x1x::new_ads1115(RefCellDevice::new(&i2c_bus), TargetAddr::default());
+    // Modul #2 (ADDR->VDD, alamat 0x49): TGS2600, TGS2602, TGS2611, TGS2620.
+    let mut adc_b = Ads1x1x::new_ads1115(RefCellDevice::new(&i2c_bus), TargetAddr::Vdd);
+
+    if adc_a.set_full_scale_range(FullScaleRange::Within4_096V).is_err() {
+        warn!("Gagal set full scale range ADS1115 #1 / 0x48 (cek wiring/alamat I2C)");
+    }
+    if adc_b.set_full_scale_range(FullScaleRange::Within4_096V).is_err() {
+        warn!("Gagal set full scale range ADS1115 #2 / 0x49 (cek wiring/alamat I2C)");
     }
 
     loop {
-        let ch0 = block!(adc.read(channel::SingleA0)).unwrap_or(0);
-        let ch1 = block!(adc.read(channel::SingleA1)).unwrap_or(0);
-        let ch2 = block!(adc.read(channel::SingleA2)).unwrap_or(0);
-        let ch3 = block!(adc.read(channel::SingleA3)).unwrap_or(0);
+        let mq3 = block!(adc_a.read(channel::SingleA0)).unwrap_or(0);
+        let mq6 = block!(adc_a.read(channel::SingleA1)).unwrap_or(0);
+        let mq7 = block!(adc_a.read(channel::SingleA2)).unwrap_or(0);
+        let mq135 = block!(adc_a.read(channel::SingleA3)).unwrap_or(0);
+        let tgs2600 = block!(adc_b.read(channel::SingleA0)).unwrap_or(0);
+        let tgs2602 = block!(adc_b.read(channel::SingleA1)).unwrap_or(0);
+        let tgs2611 = block!(adc_b.read(channel::SingleA2)).unwrap_or(0);
+        let tgs2620 = block!(adc_b.read(channel::SingleA3)).unwrap_or(0);
 
-        esp_println::println!("DATA,{ch0},{ch1},{ch2},{ch3}");
-        READING.signal(GasReading { ch0, ch1, ch2, ch3 });
+        esp_println::println!(
+            "DATA,{mq3},{mq6},{mq7},{mq135},{tgs2600},{tgs2602},{tgs2611},{tgs2620}"
+        );
+        READING.signal(GasReading {
+            mq3,
+            mq6,
+            mq7,
+            mq135,
+            tgs2600,
+            tgs2602,
+            tgs2611,
+            tgs2620,
+        });
 
         Timer::after(Duration::from_secs(1)).await;
     }
