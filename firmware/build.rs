@@ -21,6 +21,10 @@ fn main() {
     });
 
     let mut found = Vec::new();
+    // Dipakai buat CONFIG_HASH di bawah - deteksi apakah isi wifi_config.txt
+    // berubah dari build sebelumnya, supaya firmware tahu kapan harus pakai
+    // nilai baru ini walau ada config lain tersimpan di flash dari wizard.
+    let mut hash_input = String::new();
     for line in content.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -31,6 +35,10 @@ fn main() {
             let value = value.trim();
             println!("cargo:rustc-env={key}={value}");
             found.push(key.to_string());
+            hash_input.push_str(key);
+            hash_input.push('=');
+            hash_input.push_str(value);
+            hash_input.push('\n');
         }
     }
 
@@ -42,4 +50,12 @@ fn main() {
             );
         }
     }
+
+    // FNV-1a 32-bit, cukup buat deteksi perubahan (bukan buat keamanan).
+    let mut hash: u32 = 0x811c9dc5;
+    for byte in hash_input.as_bytes() {
+        hash ^= *byte as u32;
+        hash = hash.wrapping_mul(0x01000193);
+    }
+    println!("cargo:rustc-env=CONFIG_HASH={hash}");
 }

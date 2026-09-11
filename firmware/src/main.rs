@@ -220,16 +220,28 @@ async fn main(spawner: Spawner) -> ! {
             .tb_token
             .push_str(&tb_token.as_str()[..tb_token.len().min(32)]);
 
-        config::save(&mut flash, &new_cfg);
+        config::save(&mut flash, &new_cfg, config::current_build_hash());
         esp_println::println!("Config tersimpan ke flash. Reboot...");
         Timer::after(Duration::from_millis(200)).await;
         esp_hal::system::software_reset();
     }
 
-    let device_cfg: &'static DeviceConfig = mk_static!(
-        DeviceConfig,
-        config::load(&mut flash).unwrap_or_else(DeviceConfig::from_build_env)
-    );
+    // Prioritas: kalau wifi_config.txt berubah sejak terakhir disimpan ke
+    // flash (hash beda) -> pakai nilai baru dari wifi_config.txt (dan simpan
+    // ulang supaya boot berikutnya konsisten). Kalau hash sama (build belum
+    // berubah) -> pakai apa pun yang tersimpan di flash (termasuk hasil
+    // wizard). Kalau belum ada apa-apa di flash -> pakai wifi_config.txt.
+    let current_hash = config::current_build_hash();
+    let device_cfg: &'static DeviceConfig = mk_static!(DeviceConfig, {
+        match config::load(&mut flash) {
+            Some((saved_cfg, saved_hash)) if saved_hash == current_hash => saved_cfg,
+            _ => {
+                let fresh = DeviceConfig::from_build_env();
+                config::save(&mut flash, &fresh, current_hash);
+                fresh
+            }
+        }
+    });
 
     let net_config = EmbassyNetConfig::dhcpv4(Default::default());
     let seed = (rng.random() as u64) << 32 | rng.random() as u64;
