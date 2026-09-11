@@ -4,12 +4,24 @@
 // Firmware: ESP32-S3, baca array sensor gas via ADS1115 (I2C), kirim
 // telemetry ke ThingsBoard Cloud via MQTT.
 //
-// STATUS: WiFi + MQTT telemetry sedang divalidasi build-nya di hardware.
-// OTA firmware update (ThingsBoard OTA package, protokol v2/fw/...) untuk
-// SEMENTARA DIMATIKAN — hanya deteksi + log, belum benar-benar menulis ke
-// flash — karena crate esp-hal-ota versi terbaru butuh esp-hal generasi
-// lebih baru dari yang didukung esp-wifi saat ini (konflik versi). Aktifkan
-// lagi setelah versi esp-wifi/esp-hal-ota searah generasinya.
+// STATUS: WiFi + MQTT + 8 sensor terbukti jalan di hardware asli.
+//
+// OTA firmware update (ThingsBoard OTA package, protokol v2/fw/...) BARU
+// DIAKTIFKAN LAGI di branch feature/ota (2026-09-11) - esp-hal-ota di-pin
+// ke versi 0.4.1 yang kebetulan minta esp32s3 ^0.32.0, PAS sama yang ditarik
+// esp-wifi 0.14.1 kita (dicek manual lewat crates.io API dulu, bukan
+// nebak). BELUM PERNAH DIUJI end-to-end di hardware (belum ada firmware
+// baru yang dicoba di-upload lewat ThingsBoard OTA package) - resiko utama
+// kalau proses tulis flash gagal di tengah jalan (mis. putus WiFi) adalah
+// partisi OTA yang sedang ditulis jadi corrupt; partisi yang SEDANG aktif
+// (yang lagi jalan) tidak disentuh sampai proses ini benar-benar selesai
+// dan di-flush, jadi device seharusnya tetap bisa boot ke firmware lama
+// kalau OTA gagal di tengah - tapi ini asumsi dari desain esp-hal-ota,
+// belum divalidasi sendiri. WAJIB flash pakai partition table OTA:
+// `espflash flash --partition-table ./partitions.csv --erase-parts otadata ...`
+// (bukan cuma `espflash flash ... <path>` biasa yang dipakai selama ini -
+// itu pakai partition table default single "factory", TIDAK COMPATIBLE
+// dengan OTA).
 //
 // WiFi & ThingsBoard bisa diganti TANPA reflash: colok USB, buka serial
 // monitor, tekan 'c'+Enter dalam 3 detik di awal boot untuk masuk wizard
@@ -68,6 +80,7 @@ use esp_hal::{
     timer::timg::TimerGroup,
     uart::{Config as UartConfig, Uart},
 };
+use esp_hal_ota::Ota;
 use esp_storage::FlashStorage;
 use esp_wifi::{
     init,
@@ -243,6 +256,17 @@ async fn main(spawner: Spawner) -> ! {
         }
     });
 
+    // `flash` sudah tidak dipakai lagi setelah ini (config sudah selesai
+    // dibaca/ditulis di atas) - aman dipindah-kepemilikan ke Ota. Butuh
+    // partition table OTA (ota_0/ota_1/otadata, lihat partitions.csv) sudah
+    // ter-flash ke board - kalau board di-flash tanpa
+    // `--partition-table ./partitions.csv`, OTA tidak akan berfungsi karena
+    // partisinya tidak ada (baru default "factory" tunggal).
+    let mut ota = Ota::new(flash).expect(
+        "Gagal inisialisasi OTA - board mungkin belum di-flash pakai partition table OTA \
+         (jalankan: espflash flash --partition-table ./partitions.csv --erase-parts otadata ...)",
+    );
+
     let net_config = EmbassyNetConfig::dhcpv4(Default::default());
     let seed = (rng.random() as u64) << 32 | rng.random() as u64;
 
@@ -388,17 +412,81 @@ async fn main(spawner: Spawner) -> ! {
                         if let Ok(text) = core::str::from_utf8(payload) {
                             if let Some(update) = parse_fw_update(text) {
                                 info!(
-                                    "OTA package terdeteksi: {} v{} ({} bytes) - fitur OTA \
-                                     belum diaktifkan di build ini (lihat TODO OTA di firmware/README.md)",
+                                    "OTA package terdeteksi: {} v{} ({} bytes)",
                                     update.title, update.version, update.size
                                 );
-                                // TODO OTA: dulu ada implementasi tarik firmware chunk demi
-                                // chunk (protokol v2/fw/...) dan tulis ke partisi OTA lewat
-                                // esp-hal-ota, tapi crate itu butuh esp-hal generasi lebih
-                                // baru dari yang dipakai esp-wifi saat ini sehingga bentrok
-                                // versi. Aktifkan lagi setelah WiFi+MQTT telemetry di bawah
-                                // ini terbukti jalan di hardware, dan versi esp-wifi/esp-hal-ota
-                                // sudah searah generasinya.
+
+                                // Ambil firmware baru dari ThingsBoard chunk demi
+                                // chunk (protokol v2/fw/...) dan tulis ke partisi
+                                // OTA yang tidak aktif lewat esp-hal-ota.
+                                let ota_result: Result<(), ReasonCode> = async {
+                                    ota.ota_begin(update.size, update.checksum_crc32)
+                                        .map_err(|_| ReasonCode::UnspecifiedError)?;
+
+                                    client
+                                        .subscribe_to_topic("v2/fw/response/+/chunk/+")
+                                        .await?;
+
+                                    let request_id: u32 = 1;
+                                    let mut chunk_index: u32 = 0;
+
+                                    loop {
+                                        let mut req_topic: HString<64> = HString::new();
+                                        let _ = write!(
+                                            req_topic,
+                                            "v2/fw/request/{request_id}/chunk/{chunk_index}"
+                                        );
+                                        let mut resp_topic_match: HString<64> = HString::new();
+                                        let _ = write!(
+                                            resp_topic_match,
+                                            "v2/fw/response/{request_id}/chunk/{chunk_index}"
+                                        );
+
+                                        let mut size_str: HString<8> = HString::new();
+                                        let _ = write!(size_str, "{OTA_CHUNK_SIZE}");
+                                        client
+                                            .send_message(
+                                                req_topic.as_str(),
+                                                size_str.as_bytes(),
+                                                QualityOfService::QoS1,
+                                                false,
+                                            )
+                                            .await?;
+
+                                        // Tunggu response chunk yang sesuai
+                                        // (abaikan pesan lain yang mungkin nyasar
+                                        // masuk, mis. telemetry ack).
+                                        let chunk_len = loop {
+                                            let (topic, chunk_payload) =
+                                                client.receive_message().await?;
+                                            if topic == resp_topic_match.as_str() {
+                                                if !chunk_payload.is_empty() {
+                                                    ota.ota_write_chunk(chunk_payload).map_err(
+                                                        |_| ReasonCode::UnspecifiedError,
+                                                    )?;
+                                                }
+                                                break chunk_payload.len();
+                                            }
+                                        };
+
+                                        if chunk_len == 0 || chunk_len < OTA_CHUNK_SIZE {
+                                            break;
+                                        }
+                                        chunk_index += 1;
+                                    }
+
+                                    ota.ota_flush(true, true)
+                                        .map_err(|_| ReasonCode::UnspecifiedError)
+                                }
+                                .await;
+
+                                match ota_result {
+                                    Ok(()) => {
+                                        info!("OTA sukses, reboot...");
+                                        esp_hal::system::software_reset();
+                                    }
+                                    Err(e) => error!("OTA update gagal: {:?}", e),
+                                }
                             }
                         }
                     }
