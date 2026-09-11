@@ -8,14 +8,20 @@ Firmware Rust (`no_std`, esp-hal + embassy) untuk ESP32-S3 yang:
 3. WiFi & ThingsBoard bisa diganti **tanpa reflash** lewat wizard di serial
    monitor (tekan `c` saat boot), tersimpan di flash internal.
 
-> **Status: sudah pernah di-build, di-flash, dan terbukti kirim data ke
-> ThingsBoard di hardware asli.** Fitur **OTA firmware update** (lewat
+> **Status: sudah pernah di-build, di-flash, dan terbukti kirim data 8 sensor
+> ke ThingsBoard di hardware asli.** Fitur **OTA firmware update** (lewat
 > ThingsBoard OTA package) baru sebatas deteksi + log, belum aktif menulis ke
 > flash — lihat komentar `TODO OTA` di [`src/main.rs`](src/main.rs) untuk
 > alasannya (konflik versi `esp-hal` antara `esp-wifi` dan `esp-hal-ota`).
-> Log lewat macro `log::info!`/`error!` juga belum kelihatan di serial
-> monitor (beda dengan `esp_println::println!` yang normal) — belum
-> ditelusuri penyebabnya, tapi tidak mempengaruhi fungsi utama.
+>
+> **PENTING soal ganti WiFi:** config WiFi/ThingsBoard yang tersimpan di
+> flash internal (lewat wizard serial) **SELALU MENANG** dibanding
+> `wifi_config.txt`, walau sudah build & flash ulang berkali-kali. Kalau
+> sudah pernah jalankan wizard sekali dan sekarang mau ganti WiFi, **wajib
+> jalankan wizard lagi** (edit `wifi_config.txt` saja TIDAK CUKUP dan
+> TIDAK KELIHATAN EFEKNYA) — lihat Bagian "Ganti WiFi/ThingsBoard tanpa
+> reflash" di bawah. Ini penyebab bingung berjam-jam saat debugging WiFi
+> yang "gagal terus padahal sudah ganti config".
 
 ## Bagian 1 — Setup ThingsBoard Cloud
 
@@ -109,22 +115,34 @@ sama seperti file, atau `espflash erase-flash` (lalu flash ulang dari awal).
 
 ## Output telemetry
 
-Format JSON yang dikirim ke `v1/devices/me/telemetry`:
+Format JSON yang dikirim ke `v1/devices/me/telemetry` (8 sensor gas):
 
 ```json
-{"gas_ch0": 12345, "gas_ch1": 12000, "gas_ch2": 11800, "gas_ch3": 12500}
+{"mq3": 12345, "mq6": 12000, "mq7": 11800, "mq135": 12500, "tgs2600": 9000, "tgs2602": 8700, "tgs2611": 9200, "tgs2620": 8950}
 ```
 
-Nilai adalah raw ADC dari ADS1115 (belum dikonversi ke tegangan/ppm). Kalau
+Nilai adalah raw ADC dari 2x ADS1115 (belum dikonversi ke tegangan/ppm). Kalau
 ADS1115 belum tersambung, nilainya 0 semua (fallback, bukan error fatal).
+Format yang sama juga dicetak ke serial sebagai baris
+`DATA,mq3,mq6,mq7,mq135,tgs2600,tgs2602,tgs2611,tgs2620` — dipakai
+[`tools/record_sample.ps1`](tools/record_sample.ps1) untuk logging lokal.
 
 ## Troubleshooting
 
-- **Gagal connect WiFi**: cek SSID/PASSWORD di `wifi_config.txt` (atau config
-  hasil wizard), ESP32-S3 hanya support WiFi 2.4GHz.
+- **Gagal connect WiFi ("Disconnected") padahal SSID/password sudah benar**:
+  paling sering karena **config lama di flash masih dipakai** (lihat
+  peringatan di atas) — jalankan wizard ulang, bukan cuma edit
+  `wifi_config.txt`. Penyebab lain: router pakai keamanan **WPA/WPA2-TKIP**
+  (versi lama) yang kadang tidak didukung ESP32-S3 — cek di pengaturan WiFi
+  HP, kalau ada peringatan "keamanan lemah/TKIP", coba jaringan lain (mis.
+  hotspot HP, biasanya WPA2-AES). ESP32-S3 juga cuma support **2.4GHz**,
+  bukan 5GHz.
 - **MQTT connect gagal / device Offline di ThingsBoard**: cek `TB_TOKEN` benar
   (copy-paste dari device details), dan board punya akses internet keluar.
 - **`cargo`/`espflash` "not recognized"**: PATH belum ke-refresh, buka
   terminal/VS Code baru, atau jalankan ulang `. "$HOME\export-esp.ps1"`.
-- **Serial monitor kosong padahal device jalan (data masuk ke ThingsBoard)**:
-  known issue, lihat catatan status di atas — bukan berarti firmware crash.
+- **`espflash monitor` kosong padahal device jalan (data masuk ke ThingsBoard)**:
+  `espflash monitor` kadang gagal menangkap output karena proses
+  connect/reset-nya sendiri (belum ditelusuri sepenuhnya) — kalau perlu lihat
+  log pasti, buka koneksi serial langsung (mis. `System.IO.Ports.SerialPort`
+  di PowerShell) setelah reset manual, bukan lewat `espflash monitor`.
