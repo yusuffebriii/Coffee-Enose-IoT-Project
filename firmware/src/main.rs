@@ -161,7 +161,21 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 const TB_PORT: u16 = 1883;
 
+/// Ukuran chunk yang KITA MINTA dari ThingsBoard tiap `v2/fw/request/.../chunk/...`.
 const OTA_CHUNK_SIZE: usize = 4096;
+
+/// Ukuran buffer TCP/MQTT - SENGAJA DIPISAH dari `OTA_CHUNK_SIZE`, bukan
+/// cuma `OTA_CHUNK_SIZE + 256` seperti percobaan pertama. Ketemu di
+/// hardware (2026-09-23): ThingsBoard TIDAK selalu membatasi ukuran chunk
+/// sesuai yang kita minta - satu paket balasan pernah berukuran ~7025 byte
+/// padahal yang diminta cuma 4096, bikin buffer 4352 byte kepanic
+/// ("range end index 7025 out of range for slice of length 4352"). Margin
+/// di sini jauh lebih longgar (~3x OTA_CHUNK_SIZE) supaya ada slack kalau
+/// ThingsBoard mengirim lebih dari yang diminta lagi - TAPI ini belum
+/// tentu batas atasnya, cuma nilai yang cukup lolos dari kejadian yang
+/// sudah terjadi. Kalau nanti masih panic index-out-of-range serupa,
+/// artinya perlu dinaikkan lagi.
+const MQTT_BUF_SIZE: usize = 12288;
 
 // Judul & versi firmware yang SEDANG JALAN sekarang (bukan yang mau
 // di-OTA-kan). ThingsBoard membandingkan ini dengan firmware yang di-assign
@@ -415,10 +429,10 @@ async fn mqtt_task(
         Timer::after(Duration::from_millis(500)).await;
     }
 
-    let mut rx_buffer = [0u8; 4096];
-    let mut tx_buffer = [0u8; 4096];
-    let mut recv_buffer = [0u8; OTA_CHUNK_SIZE + 256];
-    let mut write_buffer = [0u8; OTA_CHUNK_SIZE + 256];
+    let mut rx_buffer = [0u8; MQTT_BUF_SIZE];
+    let mut tx_buffer = [0u8; MQTT_BUF_SIZE];
+    let mut recv_buffer = [0u8; MQTT_BUF_SIZE];
+    let mut write_buffer = [0u8; MQTT_BUF_SIZE];
 
     loop {
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
@@ -449,14 +463,14 @@ async fn mqtt_task(
         // ThingsBoard: access token dipakai sebagai MQTT username, password kosong.
         mqtt_config.add_username(device_cfg.tb_token.as_str());
         mqtt_config.add_client_id("coffee-enose-esp32s3");
-        mqtt_config.max_packet_size = (OTA_CHUNK_SIZE + 256) as u32;
+        mqtt_config.max_packet_size = MQTT_BUF_SIZE as u32;
 
         let mut client = MqttClient::<_, 5, _>::new(
             socket,
             &mut write_buffer,
-            OTA_CHUNK_SIZE + 256,
+            MQTT_BUF_SIZE,
             &mut recv_buffer,
-            OTA_CHUNK_SIZE + 256,
+            MQTT_BUF_SIZE,
             mqtt_config,
         );
 
@@ -633,6 +647,21 @@ async fn mqtt_task(
                                             }
                                         };
 
+                                        // ASUMSI belum terverifikasi penuh (2026-09-23):
+                                        // logic ini anggap ThingsBoard selalu balas
+                                        // persis OTA_CHUNK_SIZE byte kecuali chunk
+                                        // TERAKHIR (lebih pendek) - itu yang dipakai
+                                        // sebagai penanda "selesai". Tapi sudah
+                                        // kebukti sekali ThingsBoard bisa balas LEBIH
+                                        // BESAR dari yang diminta (lihat catatan
+                                        // MQTT_BUF_SIZE) - kalau itu juga terjadi di
+                                        // sini, chunk_len tidak akan pernah <
+                                        // OTA_CHUNK_SIZE dan loop bisa tidak pernah
+                                        // berhenti wajar (baru berhenti kalau
+                                        // ota_write_chunk menolak karena ota_size
+                                        // terlampaui, atau MQTT_BUF_SIZE kelampaui
+                                        // lagi). Awasi log OTA berikutnya untuk
+                                        // konfirmasi/perbaikan lebih lanjut.
                                         if chunk_len == 0 || chunk_len < OTA_CHUNK_SIZE {
                                             break;
                                         }
