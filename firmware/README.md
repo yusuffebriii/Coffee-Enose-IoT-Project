@@ -13,11 +13,15 @@ lalu mencetak tiap sampel sebagai baris CSV ke serial, 1 Hz.
 > akuisisi data + verifikasi hardware selesai (lihat Bagian 25-27 dokumen
 > instruksi CBP untuk TinyML/IoT/dashboard yang akan menyusul).
 >
-> **Firmware ini belum pernah di-flash / dicoba baca sensor fisik
-> sungguhan** — baru lolos `cargo check` dan `cargo build --release`
-> (compile + link berhasil). Jangan dipakai ambil data sungguhan sebelum
-> checklist Lampiran C dokumen instruksi CBP (verifikasi tegangan + scan I2C)
-> selesai.
+> **Update (2026-09-23): sudah di-flash ke ESP32-S3 asli dan terbukti
+> boot + jalan** (log serial bersih, tidak crash, `Ticker` 1Hz stabil) —
+> tapi **baru ESP32-S3-nya sendiri yang tersambung, belum ada sensor**
+> (2x ADS1115 + DHT22) yang dikabel. Scan I2C saat boot melaporkan 0
+> device, dan semua kanal gas + DHT22 fallback ke `0`/`NaN` — itu memang
+> perilaku yang benar untuk board tanpa sensor, bukan bug. Hardware
+> sensor menyusul dipasang besok. Jangan dipakai ambil data sungguhan
+> sebelum checklist Lampiran C dokumen instruksi CBP (verifikasi tegangan
+> + scan I2C) selesai setelah sensor terpasang.
 
 ## Protokol pengambilan data
 
@@ -88,6 +92,16 @@ Ganti `COM5` sesuai port board Anda (cek lewat
 `Get-PnpDevice -Class Ports -PresentOnly`). Tidak perlu `--partition-table`
 lagi — firmware ini tidak pakai OTA, jadi partition table default (single
 `factory`) yang dipakai espflash sudah cukup.
+
+## Scan I2C saat boot
+
+Tiap kali firmware boot, sebelum mulai streaming data, otomatis scan alamat
+I2C `0x03`-`0x77` dan mencetak alamat mana saja yang merespons (ACK) — ini
+implementasi item #7 Lampiran C dokumen instruksi ("Pemindaian bus I2C
+dilakukan; alamat kedua ADS1115 terkonfirmasi"). Kalau wiring benar, akan
+muncul dua baris menyebut `0x48` dan `0x49`; kalau tidak ada satu pun
+device yang merespons, langsung ketahuan dari log tanpa harus menebak dari
+data `0` di baris `DATA,...` setelahnya.
 
 ## Output serial
 

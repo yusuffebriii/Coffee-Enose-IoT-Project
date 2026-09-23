@@ -46,11 +46,19 @@
 // (detik) pembacaan DHT22 terakhir yang sedang di-hold, supaya penyelarasan
 // waktu bisa diaudit (lihat dokumen instruksi §17.4).
 //
-// TODO WAJIB sebelum dipakai ambil data sungguhan (belum satu pun tervalidasi
-// ke hardware fisik - kode ini baru lolos `cargo check`, belum pernah
-// di-flash/dicoba baca sensor nyata):
-//  - Jalankan Lampiran C dokumen instruksi CBP (7 langkah verifikasi
-//    tegangan + scan bus I2C) SEBELUM menyambungkan sensor ke ADC.
+// Status hardware (2026-09-23): sudah di-flash ke ESP32-S3 asli dan
+// TERBUKTI BOOT + JALAN (log serial bersih, Ticker 1Hz stabil, tidak
+// crash) - tapi BARU ESP32-S3-nya sendiri yang tersambung, belum ada
+// sensor (2x ADS1115 + DHT22) yang dikabel ke board. Scan I2C saat boot
+// (`i2c_bus_scan`, item #7 Lampiran C) melaporkan 0 device ditemukan pada
+// kondisi ini - itu HASIL YANG BENAR untuk board tanpa sensor, bukan bug.
+//
+// TODO WAJIB sebelum dipakai ambil data sungguhan (belum tervalidasi ke
+// sensor fisik - baru boot ESP32-S3 polosan):
+//  - Sambungkan 2x ADS1115 + DHT22 ke board, lalu jalankan Lampiran C
+//    dokumen instruksi CBP (7 langkah verifikasi tegangan + scan bus I2C -
+//    langkah scan-nya otomatis tercetak tiap boot lewat `i2c_bus_scan`)
+//    SEBELUM menyambungkan sensor ke ADC dengan tegangan sungguhan.
 //  - Sesuaikan pin I2C (SDA/SCL) & pin DHT22 (GPIO4 di bawah cuma TEBAKAN
 //    awal, GANTI sesuai wiring board Anda) kalau beda dari asumsi di atas.
 //  - Sesuaikan FullScaleRange ADS1115 dengan rentang tegangan output sensor
@@ -86,6 +94,34 @@ esp_bootloader_esp_idf::esp_app_desc!();
 /// pembacaan supaya kanal gas tetap bisa dicetak tiap 1 detik.
 const DHT_MIN_INTERVAL: Duration = Duration::from_secs(2);
 
+/// Scan alamat I2C 7-bit 0x03-0x77 (di luar rentang ini reserved), cetak
+/// tiap alamat yang ACK. `write(addr, &[])` cukup untuk deteksi kehadiran -
+/// device manapun yang benar-benar ada di bus akan ACK alamatnya sendiri
+/// walau payload-nya kosong, tanpa perlu tahu protokol internal device itu.
+fn i2c_bus_scan(i2c: &mut I2c<'_, esp_hal::Blocking>) {
+    esp_println::println!("Scan bus I2C (0x03-0x77)...");
+    let mut found = 0u8;
+    for addr in 0x03u8..=0x77u8 {
+        if i2c.write(addr, &[]).is_ok() {
+            let note = match addr {
+                0x48 => " <- diharapkan ADS1115 #1 (MQ-6/MQ-135/MQ-3/MQ-7)",
+                0x49 => " <- diharapkan ADS1115 #2 (TGS2611/2602/2600/2620)",
+                _ => "",
+            };
+            esp_println::println!("  alamat 0x{addr:02X} merespons (ACK){note}");
+            found += 1;
+        }
+    }
+    if found == 0 {
+        warn!("Scan I2C: TIDAK ADA device merespons - cek wiring SDA=GPIO8/SCL=GPIO9, catu daya modul, pull-up.");
+    } else {
+        esp_println::println!("Scan I2C selesai: {found} device ditemukan.");
+        if found < 2 {
+            warn!("Scan I2C: kurang dari 2 device (diharapkan 2x ADS1115) - cek modul yang belum terdeteksi.");
+        }
+    }
+}
+
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) -> ! {
     esp_println::logger::init_logger_from_env();
@@ -98,13 +134,22 @@ async fn main(spawner: Spawner) -> ! {
     // I2C untuk 2x ADS1115 (array 8 sensor gas). 400 kHz sesuai acuan repo
     // referensi (default esp-hal sebenarnya 100 kHz) - ADS1115 mendukung
     // fast mode 400 kHz. TODO: sesuaikan pin kalau wiring board Anda beda.
-    let i2c = I2c::new(
+    let mut i2c = I2c::new(
         peripherals.I2C0,
         I2cConfig::default().with_frequency(Rate::from_khz(400)),
     )
     .unwrap()
     .with_sda(peripherals.GPIO8)
     .with_scl(peripherals.GPIO9);
+
+    // Lampiran C dokumen instruksi CBP, item #7: "Pemindaian bus I2C
+    // dilakukan; alamat kedua ADS1115 terkonfirmasi" - dijalankan sekali
+    // tiap boot, sebelum sensor_task mulai baca terus-menerus, supaya bisa
+    // langsung ketahuan dari log serial apakah board melihat modul ADS1115
+    // di bus sama sekali (tanpa ini, kanal 0 bisa disalahartikan sebagai
+    // "sensor terbaca tapi nilainya kosong" padahal sebenarnya device-nya
+    // tidak pernah ke-detect).
+    i2c_bus_scan(&mut i2c);
 
     // Pin DHT22, open-drain + pull-up internal (protokol 1-wire DHT22 minta
     // pin yang bisa gantian jadi input/output - Flex + DriveMode::OpenDrain
