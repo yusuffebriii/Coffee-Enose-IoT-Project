@@ -733,7 +733,15 @@ fn parse_fw_update(json: &str) -> Option<FwUpdate<'_>> {
     let version = extract_str_field(json, "fw_version")?;
     let size = extract_u32_field(json, "fw_size")?;
     let checksum_hex = extract_str_field(json, "fw_checksum")?;
-    let checksum_crc32 = u32::from_str_radix(checksum_hex, 16).ok()?;
+    // KETEMU DI HARDWARE (2026-09-23): fw_checksum dari ThingsBoard, di-parse
+    // apa adanya sebagai hex big-endian biasa, ternyata urutan byte-nya
+    // TERBALIK dari CRC32 yang dihitung esp_hal_ota::crc32::calc_crc32 atas
+    // data yang sama persis (dikonfirmasi: 0xEE6EDFD6 hasil hitung kita vs
+    // 0xD6DF6EEE dari ThingsBoard - keduanya sama kalau salah satu dibalik
+    // urutan byte-nya, BUKAN korup data karena hasilnya rapi kebalik, bukan
+    // acak). `.swap_bytes()` membalik urutan byte u32 supaya konvensinya
+    // cocok dengan yang dipakai esp-hal-ota.
+    let checksum_crc32 = u32::from_str_radix(checksum_hex, 16).ok()?.swap_bytes();
     Some(FwUpdate {
         title,
         version,
