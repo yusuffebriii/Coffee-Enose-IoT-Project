@@ -149,12 +149,15 @@ dependencies = [
  "embedded-hal-async",
  "embedded-hal-bus",
  "embedded-io",
+ "embedded-storage",
  "esp-alloc",
  "esp-backtrace",
  "esp-bootloader-esp-idf",
  "esp-hal",
  "esp-hal-embassy",
+ "esp-hal-ota",
  "esp-println",
+ "esp-storage",
  "esp-wifi",
  "heapless",
  "log",
@@ -660,7 +663,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c304bbe17df32db8bc0027a9da989aa3efebbd4e7a79d58850deb29e2af577f"
 dependencies = [
  "cfg-if",
- "esp-build",
+ "esp-build 0.3.0",
  "esp-config",
  "esp-metadata",
  "esp-println",
@@ -680,6 +683,17 @@ dependencies = [
  "esp-config",
  "md-5",
  "strum",
+]
+
+[[package]]
+name = "esp-build"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b94a4b8d74e7cc7baabcca5b2277b41877e039ad9cd49959d48ef94dac7eab4b"
+dependencies = [
+ "quote",
+ "syn 2.0.119",
+ "termcolor",
 ]
 
 [[package]]
@@ -730,7 +744,7 @@ dependencies = [
  "embedded-io",
  "embedded-io-async",
  "enumset",
- "esp-build",
+ "esp-build 0.3.0",
  "esp-config",
  "esp-hal-procmacros",
  "esp-metadata",
@@ -767,13 +781,24 @@ dependencies = [
  "embassy-time",
  "embassy-time-driver",
  "embassy-time-queue-utils",
- "esp-build",
+ "esp-build 0.3.0",
  "esp-config",
  "esp-hal",
  "esp-hal-procmacros",
  "esp-metadata",
  "portable-atomic",
  "static_cell",
+]
+
+[[package]]
+name = "esp-hal-ota"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "522a63a912c9204405e1bac76d9eb3b3fa96d91a05310b34f6b5f9e5a0c282dc"
+dependencies = [
+ "embedded-storage",
+ "esp32s3",
+ "log",
 ]
 
 [[package]]
@@ -813,7 +838,7 @@ checksum = "fae8b38d5fdc1d29d823c4737f18edfb0ccf0406985cf893f87c0cfc26a6ab33"
 dependencies = [
  "critical-section",
  "document-features",
- "esp-build",
+ "esp-build 0.3.0",
  "esp-metadata",
  "log",
 ]
@@ -827,6 +852,17 @@ dependencies = [
  "document-features",
  "riscv",
  "riscv-rt-macros",
+]
+
+[[package]]
+name = "esp-storage"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "661aebceb62e0caadd7e6bddd88b2d891c3b08cea4eb5afe96ef697674ccda5c"
+dependencies = [
+ "critical-section",
+ "embedded-storage",
+ "esp-build 0.1.0",
 ]
 
 [[package]]
@@ -857,7 +893,7 @@ dependencies = [
  "embedded-io-async",
  "enumset",
  "esp-alloc",
- "esp-build",
+ "esp-build 0.3.0",
  "esp-config",
  "esp-hal",
  "esp-metadata",

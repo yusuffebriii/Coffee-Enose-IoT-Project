@@ -3,9 +3,12 @@ target = "xtensa-esp32s3-none-elf"
 rustflags = ["-C", "link-arg=-Tlinkall.x", "-C", "link-arg=-nostartfiles"]
 
 [target.xtensa-esp32s3-none-elf]
-# Partition table default (single "factory") cukup - tidak ada OTA lagi di
-# firmware ini (lihat catatan rewrite di src/main.rs).
-runner = "espflash flash --monitor"
+# Partition table OTA (ota_0/ota_1/otadata) WAJIB dipakai sekarang - default
+# single "factory" tidak akan berfungsi dengan esp-hal-ota (lihat
+# partitions.csv). --erase-parts otadata supaya boot selalu mulai dari
+# ota_0 yang bersih (bukan nyangkut di slot lama kalau sebelumnya sempat
+# pakai partition table default/OTA versi lain).
+runner = "espflash flash --monitor --partition-table ./partitions.csv --erase-parts otadata"
 
 [env]
 ESP_LOG = "INFO"

@@ -28,6 +28,14 @@ esp-println = { version = "=0.14.0", default-features = false, features = [
     "critical-section",
 ] }
 esp-hal-embassy = { version = "=0.8.1", features = ["esp32s3"] }
+# esp-storage di-pin ke versi lama yang tidak menarik PAC esp32s3 baru,
+# supaya tidak bentrok sama esp-wifi. esp-hal-ota 0.4.1 dipilih khusus
+# karena versi itu minta esp32s3 ^0.32.0 - PAS sama yang ditarik esp-wifi
+# 0.14.1 kita (dicek manual lewat crates.io API sebelum ditambah, bukan
+# nebak - sudah pernah bentrok versi di percobaan pertama dulu).
+esp-storage = { version = "=0.4.0", features = ["esp32s3"] }
+esp-hal-ota = { version = "=0.4.1", features = ["esp32s3"] }
+embedded-storage = "0.3.1"
 
 embassy-executor = { version = "=0.7.0", features = ["task-arena-size-20480"] }
 embassy-time = "=0.4.0"

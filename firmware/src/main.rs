@@ -3,24 +3,38 @@
 
 // Firmware: ESP32-S3, baca array 8 sensor gas (2x ADS1115, I2C) + 1x DHT22
 // (temperatur/kelembapan), cetak tiap sampel sebagai baris CSV ke serial,
-// DAN kirim telemetry ke ThingsBoard Cloud via WiFi/MQTT.
+// kirim telemetry ke ThingsBoard Cloud via WiFi/MQTT, DAN dukung OTA
+// firmware update (ThingsBoard OTA package, protokol v2/fw/...).
 //
-// REWRITE BERSIH (2026-09-23) lalu WiFi+MQTT DIGABUNG ULANG (2026-09-23,
-// commit setelah scan-I2C) - firmware versi sebelum rewrite (WiFi + MQTT +
-// OTA update, terbukti jalan di hardware asli) sempat dilepas total supaya
-// fokus akuisisi sensor dulu. Sekarang WiFi+MQTT digabung ulang dari
-// riwayat git itu (`git log -- firmware/src/main.rs`), TAPI TANPA OTA dan
-// TANPA wizard konfigurasi via serial:
-//  - OTA tidak diminta lagi saat ini - kalau perlu nanti, ambil lagi dari
-//    commit sebelum rewrite (butuh esp-hal-ota + partition table OTA).
-//  - Wizard serial (ganti WiFi tanpa reflash, simpan ke flash mentah di
-//    offset tetap) SENGAJA tidak dipakai lagi - riwayatnya pernah buggy
-//    (lihat commit "Dokumentasikan bug 'config flash selalu menang'"), dan
-//    menulis flash mentah di luar partition table custom berisiko menimpa
-//    partisi app yang sedang jalan kalau ukuran partisi default berubah.
-//    Config WiFi/ThingsBoard sekarang HANYA dari wifi_config.txt (dibaca
-//    saat compile lewat build.rs, lihat src/config.rs) - ganti WiFi berarti
-//    edit file itu + reflash.
+// REWRITE BERSIH (2026-09-23) -> WiFi+MQTT DIGABUNG ULANG (2026-09-23) ->
+// OTA DIGABUNG ULANG (2026-09-23, sore) - firmware versi sebelum rewrite
+// (WiFi + MQTT + OTA, terbukti jalan di hardware asli) sempat dilepas
+// total supaya fokus akuisisi sensor dulu, lalu WiFi+MQTT digabung ulang
+// (dan terbukti jalan lagi di hardware, lihat commit setelahnya), dan
+// sekarang OTA-nya juga digabung ulang dari riwayat git yang sama
+// (`git log -- firmware/src/main.rs`, commit `90da677` dan sebelumnya).
+//
+// PERINGATAN OTA: proses tulis flash BELUM PERNAH diuji ulang di hardware
+// sejak digabung kembali ke struktur kode yang baru (sensor_task dengan
+// GasReading volt-only, dkk). Logic-nya diambil apa adanya dari versi yang
+// dulu terbukti jalan, tapi belum pernah dicoba end-to-end (upload OTA
+// package sungguhan dari ThingsBoard) di iterasi ini. Resiko utama kalau
+// proses tulis flash gagal di tengah jalan (mis. putus WiFi) adalah
+// partisi OTA yang sedang ditulis jadi corrupt; partisi yang SEDANG aktif
+// (yang lagi jalan) tidak disentuh sampai proses ini benar-benar selesai
+// dan di-flush, jadi device seharusnya tetap bisa boot ke firmware lama
+// kalau OTA gagal di tengah - tapi ini asumsi dari desain esp-hal-ota,
+// belum divalidasi sendiri di iterasi ini. WAJIB flash pakai partition
+// table OTA (`espflash flash --partition-table ./partitions.csv
+// --erase-parts otadata ...` - sudah otomatis lewat `.cargo/config.toml`,
+// bukan `espflash flash ... <path>` biasa tanpa argumen tambahan).
+//
+// Wizard konfigurasi WiFi via serial (ganti WiFi tanpa reflash, simpan ke
+// flash mentah di offset tetap) SENGAJA TETAP TIDAK dipakai - riwayatnya
+// pernah buggy (lihat commit "Dokumentasikan bug 'config flash selalu
+// menang'"). Config WiFi/ThingsBoard sekarang HANYA dari wifi_config.txt
+// (dibaca saat compile lewat build.rs, lihat src/config.rs) - ganti WiFi
+// berarti edit file itu + reflash.
 //
 // Protokol pengambilan data (keputusan eksplisit, BUKAN angka di dokumen
 // instruksi CBP resmi §14.1 yang minta 10 g aliquot/500 detik): 10x
@@ -65,14 +79,14 @@
 // dokumen instruksi §17.4).
 //
 // Status hardware (2026-09-23): sudah di-flash ke ESP32-S3 asli dan
-// TERBUKTI BOOT + JALAN (log serial bersih, Ticker 1Hz stabil, tidak
-// crash) - tapi BARU ESP32-S3-nya sendiri yang tersambung, belum ada
-// sensor (2x ADS1115 + DHT22) yang dikabel ke board. Scan I2C saat boot
-// (`i2c_bus_scan`, item #7 Lampiran C) melaporkan 0 device ditemukan pada
-// kondisi ini - itu HASIL YANG BENAR untuk board tanpa sensor, bukan bug.
-// Bagian WiFi/MQTT di bawah BELUM PERNAH dicoba di hardware sejak digabung
-// ulang (beda dari versi sebelum rewrite yang sudah terbukti jalan - logic-
-// nya sama persis, tapi belum di-flash ulang setelah digabung).
+// TERBUKTI BOOT + JALAN, termasuk WiFi connect + MQTT connect ke
+// ThingsBoard (log lengkap: WiFi connected! -> dapat IP DHCP -> MQTT
+// connected ke ThingsBoard) - tapi BARU ESP32-S3-nya sendiri yang
+// tersambung, belum ada sensor (2x ADS1115 + DHT22) yang dikabel ke
+// board. Scan I2C saat boot (`i2c_bus_scan`, item #7 Lampiran C)
+// melaporkan 0 device ditemukan pada kondisi ini - itu HASIL YANG BENAR
+// untuk board tanpa sensor, bukan bug. Bagian OTA di bawah BELUM PERNAH
+// dicoba di hardware sejak digabung ulang (lihat peringatan OTA di atas).
 //
 // TODO WAJIB sebelum dipakai ambil data sungguhan (belum tervalidasi ke
 // sensor fisik - baru boot ESP32-S3 polosan):
@@ -89,15 +103,14 @@
 //  - Konfirmasi urutan channel AIN0-AIN3 tiap modul ADS1115 cocok dengan
 //    wiring fisik kelompok ini (lihat catatan di atas) - kalau beda, tinggal
 //    tukar argumen `channel::SingleAx` di `sensor_task`.
-//  - Verifikasi API crate `dht-sensor` (`dht22::blocking::read`) terhadap
-//    versi yang benar-benar ter-resolve di Cargo.lock.
 //  - Copy wifi_config.example.txt -> wifi_config.txt, isi SSID/PASSWORD/
 //    TB_HOST/TB_TOKEN (lihat firmware/README.md) sebelum build - build.rs
 //    akan gagal (panic saat compile) kalau file itu belum ada.
-//  - Verifikasi method rust-mqtt (`connect_to_broker`, `send_message`,
-//    `receive_message`, `send_ping`) terhadap versi crate yang benar-benar
-//    ter-resolve - sudah pernah jalan di versi sebelum rewrite, tapi belum
-//    dicoba lagi setelah digabung ke struktur sensor_task yang baru.
+//  - TES OTA end-to-end sebelum diandalkan: upload firmware baru (versi
+//    CURRENT_FW_VERSION dinaikkan) sebagai OTA package di ThingsBoard,
+//    assign ke device, pastikan proses download+flash+reboot sukses.
+//    Di ThingsBoard, checksum algorithm OTA package WAJIB diset ke CRC32
+//    (parser di bawah cuma menangani CRC32 hex string).
 
 mod config;
 
@@ -128,6 +141,8 @@ use esp_hal::{
     time::Rate,
     timer::timg::TimerGroup,
 };
+use esp_hal_ota::Ota;
+use esp_storage::FlashStorage;
 use esp_wifi::{
     init,
     wifi::{ClientConfiguration, Configuration, WifiController, WifiDevice, WifiEvent, WifiState},
@@ -145,6 +160,19 @@ use rust_mqtt::{
 esp_bootloader_esp_idf::esp_app_desc!();
 
 const TB_PORT: u16 = 1883;
+
+const OTA_CHUNK_SIZE: usize = 4096;
+
+// Judul & versi firmware yang SEDANG JALAN sekarang (bukan yang mau
+// di-OTA-kan). ThingsBoard membandingkan ini dengan firmware yang di-assign
+// ke device - kalau beda, baru dia push shared attributes fw_title/
+// fw_version/dst lewat v1/devices/me/attributes yang memicu proses OTA di
+// bawah. Tanpa lapor current_fw_title/current_fw_version ini, ThingsBoard
+// tidak tahu device perlu di-update sama sekali. WAJIB naikkan
+// CURRENT_FW_VERSION tiap kali build firmware baru yang mau diupload
+// sebagai OTA package, supaya beda dari versi yang sedang jalan.
+const CURRENT_FW_TITLE: &str = "coffee-enose";
+const CURRENT_FW_VERSION: &str = "2.0.0";
 
 /// Sensor lingkungan tidak boleh dibaca lebih cepat dari ini (dokumen
 /// instruksi CBP §9.2: DHT22 maksimum 0,5 Hz). Nilai lama di-hold di antara
@@ -296,6 +324,17 @@ async fn main(spawner: Spawner) -> ! {
     // wizard serial + flash persistence tidak dipakai lagi.
     let device_cfg: &'static DeviceConfig = mk_static!(DeviceConfig, DeviceConfig::from_build_env());
 
+    // Butuh partition table OTA (ota_0/ota_1/otadata, lihat partitions.csv)
+    // sudah ter-flash ke board - kalau board di-flash tanpa
+    // `--partition-table ./partitions.csv`, OTA tidak akan berfungsi karena
+    // partisinya tidak ada (default cuma "factory" tunggal). Sudah otomatis
+    // lewat runner di .cargo/config.toml.
+    let flash = FlashStorage::new();
+    let ota = Ota::new(flash).expect(
+        "Gagal inisialisasi OTA - board mungkin belum di-flash pakai partition table OTA \
+         (jalankan: espflash flash --partition-table ./partitions.csv --erase-parts otadata ...)",
+    );
+
     let net_config = EmbassyNetConfig::dhcpv4(Default::default());
     let seed = (rng.random() as u64) << 32 | rng.random() as u64;
 
@@ -308,7 +347,7 @@ async fn main(spawner: Spawner) -> ! {
 
     spawner.spawn(connection(controller, device_cfg)).ok();
     spawner.spawn(net_task(runner)).ok();
-    spawner.spawn(mqtt_task(stack, device_cfg)).ok();
+    spawner.spawn(mqtt_task(stack, device_cfg, ota)).ok();
 
     // main() tidak melakukan apa-apa lagi - sensor_task, connection,
     // net_task, dan mqtt_task semuanya jalan independen sebagai task
@@ -351,14 +390,15 @@ async fn net_task(mut runner: Runner<'static, WifiDevice<'static>>) {
 }
 
 /// Tunggu link up + dapat IP dari DHCP, lalu loop connect ke ThingsBoard
-/// via MQTT dan publish `READING` terbaru tiap 5 detik. Reconnect otomatis
+/// via MQTT, publish `READING` terbaru tiap 5 detik, dan proses OTA
+/// firmware update kalau ThingsBoard meng-assign satu ke device (lewat
+/// shared attributes `fw_title`/`fw_version`/dst). Reconnect otomatis
 /// (jeda 3 detik) kalau koneksi putus - tidak pernah menyerah permanen.
-/// Task ini TIDAK OTA (lihat catatan kepala file) - cuma publish telemetry
-/// satu arah, tidak subscribe/proses perintah dari cloud.
 #[embassy_executor::task]
 async fn mqtt_task(
     stack: embassy_net::Stack<'static>,
     device_cfg: &'static DeviceConfig,
+    mut ota: Ota<FlashStorage>,
 ) -> ! {
     loop {
         if stack.is_link_up() {
@@ -375,10 +415,10 @@ async fn mqtt_task(
         Timer::after(Duration::from_millis(500)).await;
     }
 
-    let mut rx_buffer = [0u8; 2048];
-    let mut tx_buffer = [0u8; 2048];
-    let mut recv_buffer = [0u8; 1024];
-    let mut write_buffer = [0u8; 1024];
+    let mut rx_buffer = [0u8; 4096];
+    let mut tx_buffer = [0u8; 4096];
+    let mut recv_buffer = [0u8; OTA_CHUNK_SIZE + 256];
+    let mut write_buffer = [0u8; OTA_CHUNK_SIZE + 256];
 
     loop {
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
@@ -409,14 +449,14 @@ async fn mqtt_task(
         // ThingsBoard: access token dipakai sebagai MQTT username, password kosong.
         mqtt_config.add_username(device_cfg.tb_token.as_str());
         mqtt_config.add_client_id("coffee-enose-esp32s3");
-        mqtt_config.max_packet_size = 1024;
+        mqtt_config.max_packet_size = (OTA_CHUNK_SIZE + 256) as u32;
 
         let mut client = MqttClient::<_, 5, _>::new(
             socket,
             &mut write_buffer,
-            1024,
+            OTA_CHUNK_SIZE + 256,
             &mut recv_buffer,
-            1024,
+            OTA_CHUNK_SIZE + 256,
             mqtt_config,
         );
 
@@ -426,6 +466,55 @@ async fn mqtt_task(
             continue;
         }
         info!("MQTT connected ke ThingsBoard");
+
+        if let Err(e) = client.subscribe_to_topic("v1/devices/me/attributes").await {
+            error!("Subscribe shared attributes gagal: {:?}", e);
+        }
+
+        // Lapor versi firmware yang sedang jalan sekarang - ThingsBoard
+        // butuh ini buat tahu apakah firmware yang di-assign ke device
+        // lebih baru atau tidak (lihat komentar CURRENT_FW_VERSION).
+        {
+            let mut fw_report: HString<128> = HString::new();
+            let _ = write!(
+                fw_report,
+                "{{\"current_fw_title\":\"{CURRENT_FW_TITLE}\",\"current_fw_version\":\"{CURRENT_FW_VERSION}\"}}"
+            );
+            if let Err(e) = client
+                .send_message(
+                    "v1/devices/me/attributes",
+                    fw_report.as_bytes(),
+                    QualityOfService::QoS1,
+                    false,
+                )
+                .await
+            {
+                error!("Lapor current firmware version gagal: {:?}", e);
+            }
+        }
+
+        // Subscribe topic attribute cuma nangkep PERUBAHAN baru setelah
+        // subscribe ini, bukan attribute yang sudah ada/di-assign SEBELUM
+        // device connect (mis. firmware yang sudah di-assign sebelum board
+        // reconnect). Makanya perlu minta aktif ("request") status attribute
+        // yang berlaku sekarang, responnya lewat topic response di bawah.
+        if let Err(e) = client
+            .subscribe_to_topic("v1/devices/me/attributes/response/+")
+            .await
+        {
+            error!("Subscribe attributes response gagal: {:?}", e);
+        }
+        if let Err(e) = client
+            .send_message(
+                "v1/devices/me/attributes/request/1",
+                b"{\"sharedKeys\":\"fw_title,fw_version,fw_size,fw_checksum,fw_checksum_algorithm,fw_tag\"}",
+                QualityOfService::QoS1,
+                false,
+            )
+            .await
+        {
+            error!("Request current shared attributes gagal: {:?}", e);
+        }
 
         'session: loop {
             // NB: publish_tick/ping_tick dibuat ulang tiap putaran loop, jadi
@@ -480,9 +569,91 @@ async fn mqtt_task(
                         break 'session;
                     }
                 }
-                Either3::Third(Ok(_)) => {
-                    // Task ini tidak OTA - pesan masuk (mis. shared attributes
-                    // update) sengaja diabaikan, tidak ada subscribe aktif.
+                Either3::Third(Ok((topic, payload))) => {
+                    if topic == "v1/devices/me/attributes"
+                        || topic.starts_with("v1/devices/me/attributes/response/")
+                    {
+                        if let Ok(text) = core::str::from_utf8(payload) {
+                            if let Some(update) = parse_fw_update(text) {
+                                info!(
+                                    "OTA package terdeteksi: {} v{} ({} bytes)",
+                                    update.title, update.version, update.size
+                                );
+
+                                // Ambil firmware baru dari ThingsBoard chunk demi
+                                // chunk (protokol v2/fw/...) dan tulis ke partisi
+                                // OTA yang tidak aktif lewat esp-hal-ota.
+                                let ota_result: Result<(), ReasonCode> = async {
+                                    ota.ota_begin(update.size, update.checksum_crc32)
+                                        .map_err(|_| ReasonCode::UnspecifiedError)?;
+
+                                    client
+                                        .subscribe_to_topic("v2/fw/response/+/chunk/+")
+                                        .await?;
+
+                                    let request_id: u32 = 1;
+                                    let mut chunk_index: u32 = 0;
+
+                                    loop {
+                                        let mut req_topic: HString<64> = HString::new();
+                                        let _ = write!(
+                                            req_topic,
+                                            "v2/fw/request/{request_id}/chunk/{chunk_index}"
+                                        );
+                                        let mut resp_topic_match: HString<64> = HString::new();
+                                        let _ = write!(
+                                            resp_topic_match,
+                                            "v2/fw/response/{request_id}/chunk/{chunk_index}"
+                                        );
+
+                                        let mut size_str: HString<8> = HString::new();
+                                        let _ = write!(size_str, "{OTA_CHUNK_SIZE}");
+                                        client
+                                            .send_message(
+                                                req_topic.as_str(),
+                                                size_str.as_bytes(),
+                                                QualityOfService::QoS1,
+                                                false,
+                                            )
+                                            .await?;
+
+                                        // Tunggu response chunk yang sesuai
+                                        // (abaikan pesan lain yang mungkin nyasar
+                                        // masuk, mis. telemetry ack).
+                                        let chunk_len = loop {
+                                            let (topic, chunk_payload) =
+                                                client.receive_message().await?;
+                                            if topic == resp_topic_match.as_str() {
+                                                if !chunk_payload.is_empty() {
+                                                    ota.ota_write_chunk(chunk_payload).map_err(
+                                                        |_| ReasonCode::UnspecifiedError,
+                                                    )?;
+                                                }
+                                                break chunk_payload.len();
+                                            }
+                                        };
+
+                                        if chunk_len == 0 || chunk_len < OTA_CHUNK_SIZE {
+                                            break;
+                                        }
+                                        chunk_index += 1;
+                                    }
+
+                                    ota.ota_flush(true, true)
+                                        .map_err(|_| ReasonCode::UnspecifiedError)
+                                }
+                                .await;
+
+                                match ota_result {
+                                    Ok(()) => {
+                                        info!("OTA sukses, reboot...");
+                                        esp_hal::system::software_reset();
+                                    }
+                                    Err(e) => error!("OTA update gagal: {:?}", e),
+                                }
+                            }
+                        }
+                    }
                 }
                 Either3::Third(Err(e)) => match e {
                     ReasonCode::NetworkError => {
@@ -496,6 +667,48 @@ async fn mqtt_task(
 
         Timer::after(Duration::from_secs(3)).await;
     }
+}
+
+struct FwUpdate<'a> {
+    title: &'a str,
+    version: &'a str,
+    size: u32,
+    checksum_crc32: u32,
+}
+
+/// Parser JSON minimal (tanpa alokasi/serde) khusus untuk payload shared
+/// attributes ThingsBoard saat OTA package di-assign ke device. Asumsi
+/// checksum algorithm = CRC32 (hex string).
+fn parse_fw_update(json: &str) -> Option<FwUpdate<'_>> {
+    let title = extract_str_field(json, "fw_title")?;
+    let version = extract_str_field(json, "fw_version")?;
+    let size = extract_u32_field(json, "fw_size")?;
+    let checksum_hex = extract_str_field(json, "fw_checksum")?;
+    let checksum_crc32 = u32::from_str_radix(checksum_hex, 16).ok()?;
+    Some(FwUpdate {
+        title,
+        version,
+        size,
+        checksum_crc32,
+    })
+}
+
+fn extract_str_field<'a>(json: &'a str, key: &str) -> Option<&'a str> {
+    let mut pat: HString<32> = HString::new();
+    let _ = write!(pat, "\"{key}\":\"");
+    let start = json.find(pat.as_str())? + pat.len();
+    let rest = &json[start..];
+    let end = rest.find('"')?;
+    Some(&rest[..end])
+}
+
+fn extract_u32_field(json: &str, key: &str) -> Option<u32> {
+    let mut pat: HString<32> = HString::new();
+    let _ = write!(pat, "\"{key}\":");
+    let start = json.find(pat.as_str())? + pat.len();
+    let rest = &json[start..];
+    let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+    rest[..end].parse().ok()
 }
 
 /// LSB tegangan ADS1115 pada FullScaleRange::Within4_096V (lihat

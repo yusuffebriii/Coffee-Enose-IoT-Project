@@ -1,28 +1,28 @@
-# Firmware — Coffee E-Nose (ESP32-S3, sensor + WiFi/MQTT)
+# Firmware — Coffee E-Nose (ESP32-S3, sensor + WiFi/MQTT + OTA)
 
 Firmware Rust (`no_std`, esp-hal + embassy) untuk ESP32-S3 yang membaca array
 8 sensor gas via **2x ADS1115** (I2C) + 1x **DHT22** (temperatur/kelembapan),
-mencetak tiap sampel sebagai baris CSV ke serial (1 Hz), dan mengirim
-telemetry ke **ThingsBoard Cloud via WiFi/MQTT** (publish tiap 5 detik kalau
-connect).
+mencetak tiap sampel sebagai baris CSV ke serial (1 Hz), mengirim telemetry
+ke **ThingsBoard Cloud via WiFi/MQTT** (publish tiap 5 detik kalau connect),
+dan mendukung **OTA firmware update** lewat ThingsBoard OTA package.
 
 > **Riwayat singkat:** firmware awal (sebelum 2026-09-23) sudah WiFi+MQTT+OTA
 > dan **terbukti jalan di hardware asli**. Lalu di-rewrite bersih jadi
-> akuisisi-sensor-murni dulu (fokus protokol data kelas), dan hari yang sama
-> **di-flash ulang ke ESP32-S3 asli dan terbukti boot + jalan bersih**
-> (log serial rapi, tidak crash, `Ticker` 1Hz stabil) — waktu itu baru
-> ESP32-S3-nya sendiri yang tersambung, belum ada sensor fisik. Sekarang
-> WiFi+MQTT **digabung ulang** dari riwayat git (`git log -- firmware/src/main.rs`),
-> **TANPA OTA** dan **TANPA wizard konfigurasi via serial** (lihat catatan di
-> kepala [`src/main.rs`](src/main.rs) untuk alasannya — intinya: fitur itu
-> perlu partition table custom yang belum divalidasi ulang di iterasi ini).
+> akuisisi-sensor-murni dulu (fokus protokol data kelas) — WiFi/MQTT/OTA
+> semuanya sempat dilepas. WiFi+MQTT digabung ulang duluan dan **dicoba di
+> hardware asli, BERHASIL** (log lengkap: `WiFi connected!` → dapat IP DHCP →
+> `MQTT connected ke ThingsBoard`). Sekarang **OTA juga sudah digabung
+> ulang** dari riwayat git yang sama (`git log -- firmware/src/main.rs`).
+> Wizard konfigurasi WiFi via serial (ganti WiFi tanpa reflash) SENGAJA
+> tetap tidak dipakai — lihat catatan di kepala [`src/main.rs`](src/main.rs).
 >
-> **Update: WiFi+MQTT sudah dicoba ulang di hardware dan BERHASIL** —
-> log serial menunjukkan rantai penuh `WiFi connected!` → dapat IP DHCP →
-> `MQTT connected ke ThingsBoard`, telemetry publish tiap 5 detik. Bagian
-> sensor (ADS1115/DHT22/scan I2C) statusnya masih sama seperti sebelumnya:
-> sudah boot bersih di board tanpa sensor, belum dicoba dengan sensor
-> fisik tersambung (menyusul dipasang).
+> **OTA belum diuji ulang di hardware** sejak digabung ke struktur kode
+> yang baru — logic-nya diambil apa adanya dari versi yang dulu terbukti
+> jalan, tapi belum dicoba end-to-end (upload OTA package sungguhan dari
+> ThingsBoard, lihat bagian "OTA firmware update" di bawah) di iterasi ini.
+> Bagian sensor (ADS1115/DHT22/scan I2C) statusnya masih sama seperti
+> sebelumnya: sudah boot bersih di board tanpa sensor, belum dicoba dengan
+> sensor fisik tersambung.
 
 ## Protokol pengambilan data
 
@@ -122,9 +122,11 @@ espflash flash --port COM5 --monitor target/xtensa-esp32s3-none-elf/release/coff
 ```
 
 Ganti `COM5` sesuai port board Anda (cek lewat
-`Get-PnpDevice -Class Ports -PresentOnly`). Tidak perlu `--partition-table`
-lagi — firmware ini tidak pakai OTA, jadi partition table default (single
-`factory`) yang dipakai espflash sudah cukup.
+`Get-PnpDevice -Class Ports -PresentOnly`). Runner di
+[`.cargo/config.toml`](.cargo/config.toml) sudah otomatis menyertakan
+`--partition-table ./partitions.csv --erase-parts otadata` (wajib untuk
+OTA — partition table default "factory" tunggal TIDAK akan berfungsi
+dengan `esp-hal-ota`).
 
 Build akan **gagal** kalau `wifi_config.txt` belum ada — lihat bagian
 "Setup WiFi & ThingsBoard" di atas.
@@ -193,15 +195,43 @@ bacaan sensor **terbaru** (independen dari sensor_task — kalau WiFi/MQTT
 putus, sensor_task tetap jalan dan logging lokal ke serial tidak terganggu).
 Task MQTT reconnect otomatis (jeda 3 detik) kalau koneksi putus.
 
+## OTA firmware update
+
+Firmware melapor `current_fw_title`/`current_fw_version` (lihat konstanta
+`CURRENT_FW_TITLE`/`CURRENT_FW_VERSION` di [`src/main.rs`](src/main.rs)) ke
+ThingsBoard setiap kali MQTT connect, lalu subscribe ke shared attributes.
+Kalau Anda assign firmware baru ke device di ThingsBoard (**Device profiles
+→ (profile device Anda) → OTA updates**, atau langsung di halaman device →
+**Firmware**), device otomatis:
+
+1. Deteksi `fw_title`/`fw_version` baru beda dari yang sedang jalan.
+2. Download firmware chunk demi chunk (protokol ThingsBoard `v2/fw/...`,
+   ukuran chunk `OTA_CHUNK_SIZE` = 4096 byte) ke partisi OTA yang **tidak**
+   sedang aktif.
+3. Verifikasi checksum, lalu reboot ke partisi baru itu.
+
+**Wajib sebelum upload OTA package ke ThingsBoard:** set **Checksum
+algorithm** ke **CRC32** — parser di firmware cuma menangani format itu
+(hex string).
+
+**Setiap kali build firmware baru yang mau diupload sebagai OTA package**,
+naikkan `CURRENT_FW_VERSION` di [`src/main.rs`](src/main.rs) dulu — kalau
+tidak, ThingsBoard menganggap versi yang jalan sekarang sudah sama dan
+tidak akan memicu update.
+
+⚠️ **Belum diuji end-to-end di hardware** sejak digabung ulang ke struktur
+kode yang baru — tes dulu dengan OTA package kecil/tidak kritis sebelum
+diandalkan untuk device yang sedang dipakai ambil data. Kalau proses tulis
+flash gagal di tengah jalan (mis. WiFi putus), partisi yang SEDANG aktif
+tidak disentuh (desain `esp-hal-ota`), jadi seharusnya device tetap bisa
+boot ke firmware lama — tapi ini belum divalidasi sendiri.
+
 ## Yang sengaja BELUM ada di firmware ini
 
-- **OTA firmware update** — ada di git history sebelum WiFi/MQTT digabung
-  ulang (`git log -- firmware/src/main.rs`), butuh esp-hal-ota + partition
-  table OTA custom untuk diaktifkan lagi.
-- **Wizard konfigurasi WiFi via serial** (ganti WiFi tanpa reflash) — juga
-  ada di git history, tapi sengaja tidak dipakai lagi (riwayatnya pernah
-  buggy, dan menulis flash mentah tanpa partition table custom berisiko
-  menimpa partisi app). Config sekarang cuma dari `wifi_config.txt`.
+- **Wizard konfigurasi WiFi via serial** (ganti WiFi tanpa reflash) — ada
+  di git history, tapi sengaja tidak dipakai lagi (riwayatnya pernah buggy,
+  dan menulis flash mentah tanpa partition table custom berisiko menimpa
+  partisi app). Config sekarang cuma dari `wifi_config.txt`.
 - **TinyML inference on-device** — bagian dokumen instruksi §25-26, belum
   mulai.
 - **Sesi terjadwal di device** (mis. auto-stop setelah 300 detik) — durasi
@@ -228,3 +258,8 @@ Task MQTT reconnect otomatis (jeda 3 detik) kalau koneksi putus.
 - **MQTT connect gagal / device Offline di ThingsBoard**: cek `TB_TOKEN`
   benar (copy-paste dari device details di ThingsBoard), dan board punya
   akses internet keluar.
+- **Panic "Gagal inisialisasi OTA" saat boot**: board di-flash tanpa
+  partition table OTA — pastikan pakai `espflash flash --partition-table
+  ./partitions.csv --erase-parts otadata ...` (sudah otomatis kalau lewat
+  `cargo build --release` + `espflash flash ...` seperti di atas, cek
+  runner di [`.cargo/config.toml`](.cargo/config.toml) kalau masih gagal).
