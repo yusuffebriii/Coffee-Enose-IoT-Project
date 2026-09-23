@@ -1,0 +1,8 @@
+# Salin file ini jadi "wifi_config.txt" (tanpa .example) di folder yang
+# sama, lalu isi dengan nilai asli. "wifi_config.txt" sengaja di-.gitignore
+# supaya WiFi password & access token tidak ke-commit ke git.
+
+SSID=nama_wifi_anda
+PASSWORD=password_wifi_anda
+TB_HOST=thingsboard.cloud
+TB_TOKEN=access_token_device_anda

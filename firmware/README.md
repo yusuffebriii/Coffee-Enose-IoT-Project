@@ -1,27 +1,28 @@
-# Firmware — Coffee E-Nose (ESP32-S3, akuisisi sensor)
+# Firmware — Coffee E-Nose (ESP32-S3, sensor + WiFi/MQTT)
 
 Firmware Rust (`no_std`, esp-hal + embassy) untuk ESP32-S3 yang membaca array
 8 sensor gas via **2x ADS1115** (I2C) + 1x **DHT22** (temperatur/kelembapan),
-lalu mencetak tiap sampel sebagai baris CSV ke serial, 1 Hz.
+mencetak tiap sampel sebagai baris CSV ke serial (1 Hz), dan mengirim
+telemetry ke **ThingsBoard Cloud via WiFi/MQTT** (publish tiap 5 detik kalau
+connect).
 
-> **Status (2026-09-23): rewrite bersih, project akuisisi sensor murni.**
-> Firmware versi sebelumnya (WiFi + MQTT ke ThingsBoard Cloud + OTA update)
-> **terbukti jalan di hardware asli**, tapi sengaja dilepas dulu dari
-> firmware ini supaya fokus ke akuisisi data sesuai protokol kelas. Kode itu
-> tidak hilang — masih lengkap di riwayat git sebelum commit rewrite ini
-> (`git log -- firmware/src/main.rs`), tinggal digabung ulang begitu
-> akuisisi data + verifikasi hardware selesai (lihat Bagian 25-27 dokumen
-> instruksi CBP untuk TinyML/IoT/dashboard yang akan menyusul).
+> **Riwayat singkat:** firmware awal (sebelum 2026-09-23) sudah WiFi+MQTT+OTA
+> dan **terbukti jalan di hardware asli**. Lalu di-rewrite bersih jadi
+> akuisisi-sensor-murni dulu (fokus protokol data kelas), dan hari yang sama
+> **di-flash ulang ke ESP32-S3 asli dan terbukti boot + jalan bersih**
+> (log serial rapi, tidak crash, `Ticker` 1Hz stabil) — waktu itu baru
+> ESP32-S3-nya sendiri yang tersambung, belum ada sensor fisik. Sekarang
+> WiFi+MQTT **digabung ulang** dari riwayat git (`git log -- firmware/src/main.rs`),
+> **TANPA OTA** dan **TANPA wizard konfigurasi via serial** (lihat catatan di
+> kepala [`src/main.rs`](src/main.rs) untuk alasannya — intinya: fitur itu
+> perlu partition table custom yang belum divalidasi ulang di iterasi ini).
 >
-> **Update (2026-09-23): sudah di-flash ke ESP32-S3 asli dan terbukti
-> boot + jalan** (log serial bersih, tidak crash, `Ticker` 1Hz stabil) —
-> tapi **baru ESP32-S3-nya sendiri yang tersambung, belum ada sensor**
-> (2x ADS1115 + DHT22) yang dikabel. Scan I2C saat boot melaporkan 0
-> device, dan semua kanal gas + DHT22 fallback ke `0`/`NaN` — itu memang
-> perilaku yang benar untuk board tanpa sensor, bukan bug. Hardware
-> sensor menyusul dipasang besok. Jangan dipakai ambil data sungguhan
-> sebelum checklist Lampiran C dokumen instruksi CBP (verifikasi tegangan
-> + scan I2C) selesai setelah sensor terpasang.
+> **Bagian WiFi/MQTT belum di-flash ulang** setelah digabung — logic-nya
+> identik dengan versi yang sudah terbukti jalan sebelumnya, tapi belum
+> dicoba lagi di board fisik pada struktur kode yang baru. Bagian sensor
+> (ADS1115/DHT22/scan I2C) statusnya masih sama seperti sebelumnya: sudah
+> boot bersih di board tanpa sensor, belum dicoba dengan sensor fisik
+> tersambung.
 
 ## Protokol pengambilan data
 
@@ -70,6 +71,33 @@ instruksi CBP: baca datasheet ADS1115 untuk batas tegangan input relatif
 VDD, ukur Vout tiap sensor pakai multimeter, hitung rasio pembagi tegangan
 yang terpasang, dan pastikan tidak melebihi batas aman sebelum menyalakan.
 
+## Setup WiFi & ThingsBoard (wajib sebelum build)
+
+1. Buka [thingsboard.cloud](https://thingsboard.cloud) → daftar/login.
+2. **Entities → Devices → +  → Add new device** → beri nama (mis.
+   `coffee-enose`) → **Add**.
+3. Buka device itu → tab **Details** → **Copy access token**.
+4. Copy [`wifi_config.example.txt`](wifi_config.example.txt) jadi
+   `wifi_config.txt` (folder `firmware/` yang sama), isi 4 barisnya:
+   ```
+   SSID=nama_wifi_anda
+   PASSWORD=password_wifi_anda
+   TB_HOST=thingsboard.cloud
+   TB_TOKEN=access_token_dari_langkah_3
+   ```
+   File ini **sengaja di-`.gitignore`** (tidak ke-commit) supaya password/
+   token tidak ikut ter-upload — `build.rs` otomatis membacanya saat compile
+   dan akan **gagal build (panic)** kalau file ini belum ada/lengkap.
+5. Ganti WiFi/ThingsBoard nanti = edit file ini lagi + `cargo build --release`
+   + reflash. Tidak ada cara ganti tanpa reflash di versi ini (lihat catatan
+   di kepala [`src/main.rs`](src/main.rs)).
+6. Cek data masuk: device → tab **Latest telemetry**, harus muncul field
+   seperti `mq3_raw`, `mq3_v`, `temp_c`, dst. ter-update tiap ±5 detik
+   setelah board connect WiFi.
+
+ESP32-S3 cuma dukung **WiFi 2,4GHz** (bukan 5GHz), dan butuh keamanan
+WPA2-AES (WPA/WPA2-TKIP versi lama kadang tidak didukung).
+
 ## Prasyarat build (sekali saja per laptop)
 
 - Rust toolchain `esp` (via [espup](https://github.com/esp-rs/espup)):
@@ -97,6 +125,9 @@ Ganti `COM5` sesuai port board Anda (cek lewat
 `Get-PnpDevice -Class Ports -PresentOnly`). Tidak perlu `--partition-table`
 lagi — firmware ini tidak pakai OTA, jadi partition table default (single
 `factory`) yang dipakai espflash sudah cukup.
+
+Build akan **gagal** kalau `wifi_config.txt` belum ada — lihat bagian
+"Setup WiFi & ThingsBoard" di atas.
 
 ## Scan I2C saat boot
 
@@ -138,11 +169,33 @@ DATA,t_s,mq3_raw,mq6_raw,mq7_raw,mq135_raw,tgs2600_raw,tgs2602_raw,tgs2611_raw,t
 menyimpannya ke CSV di `01_raw_data/`, menambahkan kolom `timestamp` (ISO
 8601, dicatat host saat baris diterima).
 
+## Output MQTT (ThingsBoard)
+
+Field sama seperti CSV (minus `t_s`), dikirim sebagai JSON ke topic
+`v1/devices/me/telemetry` tiap 5 detik kalau WiFi+MQTT connect:
+
+```json
+{"mq3_raw":12345,"mq6_raw":12000,"mq7_raw":11800,"mq135_raw":12500,
+ "tgs2600_raw":9000,"tgs2602_raw":8700,"tgs2611_raw":9200,"tgs2620_raw":8950,
+ "mq3_v":1.5430,"mq6_v":1.5000,"mq7_v":1.4750,"mq135_v":1.5625,
+ "tgs2600_v":1.1250,"tgs2602_v":1.0875,"tgs2611_v":1.1500,"tgs2620_v":1.1188,
+ "temp_c":29.4,"rh_pct":62.1,"dht_age_s":1}
+```
+
+Publish pakai QoS0 (tidak dijamin sampai, tapi ringan) tiap 5 detik dari
+bacaan sensor **terbaru** (independen dari sensor_task — kalau WiFi/MQTT
+putus, sensor_task tetap jalan dan logging lokal ke serial tidak terganggu).
+Task MQTT reconnect otomatis (jeda 3 detik) kalau koneksi putus.
+
 ## Yang sengaja BELUM ada di firmware ini
 
-- **WiFi / MQTT / cloud (ThingsBoard)** — ada di git history sebelum rewrite
-  ini, tinggal digabung ulang begitu akuisisi data selesai.
-- **OTA firmware update** — sama, ada di git history.
+- **OTA firmware update** — ada di git history sebelum WiFi/MQTT digabung
+  ulang (`git log -- firmware/src/main.rs`), butuh esp-hal-ota + partition
+  table OTA custom untuk diaktifkan lagi.
+- **Wizard konfigurasi WiFi via serial** (ganti WiFi tanpa reflash) — juga
+  ada di git history, tapi sengaja tidak dipakai lagi (riwayatnya pernah
+  buggy, dan menulis flash mentah tanpa partition table custom berisiko
+  menimpa partisi app). Config sekarang cuma dari `wifi_config.txt`.
 - **TinyML inference on-device** — bagian dokumen instruksi §25-26, belum
   mulai.
 - **Sesi terjadwal di device** (mis. auto-stop setelah 300 detik) — durasi
@@ -157,5 +210,15 @@ menyimpannya ke CSV di `01_raw_data/`, menambahkan kolom `timestamp` (ISO
   bus I2C untuk konfirmasi alamat `0x48`/`0x49` benar-benar terdeteksi.
 - **`Gagal baca DHT22` terus-menerus di log**: cek pull-up pin data DHT22,
   jangan poll lebih cepat dari yang firmware lakukan (sudah dibatasi 1x/2
-  detik), dan pastikan pin data memang GPIO4 (atau sudah diganti sesuai
+  detik), dan pastikan pin data memang GPIO10 (atau sudah diganti sesuai
   wiring Anda di [`src/main.rs`](src/main.rs)).
+- **Build gagal, pesan soal `wifi_config.txt` tidak ditemukan**: copy
+  `wifi_config.example.txt` jadi `wifi_config.txt` dan isi 4 field-nya
+  (lihat bagian "Setup WiFi & ThingsBoard").
+- **`Gagal connect WiFi ("Disconnected")` padahal SSID/password benar**:
+  router pakai keamanan WPA/WPA2-TKIP (versi lama, kadang tidak didukung
+  ESP32-S3) — coba jaringan lain (mis. hotspot HP, biasanya WPA2-AES).
+  ESP32-S3 juga cuma support **2,4GHz**, bukan 5GHz.
+- **MQTT connect gagal / device Offline di ThingsBoard**: cek `TB_TOKEN`
+  benar (copy-paste dari device details di ThingsBoard), dan board punya
+  akses internet keluar.

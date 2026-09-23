@@ -6,6 +6,13 @@ rust-version = "1.75"
 
 [dependencies]
 esp-hal = { version = "=1.0.0-beta.1", features = ["esp32s3", "unstable"] }
+esp-wifi = { version = "=0.14.1", features = [
+    "esp32s3",
+    "wifi",
+    "esp-alloc",
+    "log-04",
+] }
+esp-alloc = { version = "=0.8.0" }
 esp-bootloader-esp-idf = "=0.1.0"
 esp-backtrace = { version = "=0.16.0", features = [
     "esp32s3",
@@ -24,15 +31,28 @@ esp-hal-embassy = { version = "=0.8.1", features = ["esp32s3"] }
 
 embassy-executor = { version = "=0.7.0", features = ["task-arena-size-20480"] }
 embassy-time = "=0.4.0"
+embassy-net = { version = "=0.7.0", features = [
+    "tcp",
+    "udp",
+    "dhcpv4",
+    "medium-ethernet",
+    "proto-ipv6",
+    "log",
+    "dns",
+] }
+embassy-futures = "0.1"
 embassy-sync = "0.6"
 
+rust-mqtt = { version = "=0.3.0", default-features = false }
 ads1x1x = "0.3"
 dht-sensor = "0.3"
 embedded-hal = "1.0"
+embedded-hal-async = "1.0.0"
 embedded-hal-bus = "0.1"
 
 log = "0.4.27"
 nb = "1.0.0"
+embedded-io = "0.6.1"
 heapless = "0.8.0"
 static_cell = { version = "2.0", features = ["nightly"] }
 
