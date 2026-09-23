@@ -151,29 +151,32 @@ const TB_PORT: u16 = 1883;
 /// pembacaan supaya kanal gas tetap bisa dicetak tiap 1 detik.
 const DHT_MIN_INTERVAL: Duration = Duration::from_secs(2);
 
-/// Satu sampel lengkap (8 kanal gas raw+volt, DHT22, umur DHT22) - dibagi
+/// Satu sampel lengkap (8 kanal gas dalam volt, DHT22, umur DHT22) - dibagi
 /// antara `sensor_task` (yang membacanya tiap 1 detik, independen dari
 /// WiFi/MQTT) dan loop MQTT di `mqtt_task` (yang publish tiap 5 detik kalau
 /// connect). Pakai Signal (bukan Channel) karena yang dibutuhkan cuma nilai
 /// TERBARU, bukan antrian semua history.
+///
+/// Cuma 1 nilai per kanal gas (tegangan hasil konversi, BUKAN raw ADC code
+/// + volt terpisah seperti sebelumnya) - keputusan eksplisit 2026-09-23
+/// untuk kesederhanaan. CATATAN KEPATUHAN: dokumen instruksi CBP §17.5
+/// poin 1 sebenarnya minta raw ADC code DAN tegangan hasil konversi
+/// DISIMPAN KEDUANYA ("Raw voltage/ADC data ... Engineering-unit data ...
+/// disimpan sebagai turunan, bukan pengganti data mentah"). Dengan cuma
+/// menyimpan volt, ini TIDAK sepenuhnya sesuai §17.5 - raw code masih bisa
+/// dihitung balik dari volt (raw = volt / ADS1115_VOLTS_PER_LSB) selama
+/// FullScaleRange tidak berubah, tapi itu bukan hal yang sama dengan
+/// menyimpan data mentahnya langsung.
 #[derive(Clone, Copy)]
 struct GasReading {
-    mq3_raw: i16,
-    mq6_raw: i16,
-    mq7_raw: i16,
-    mq135_raw: i16,
-    tgs2600_raw: i16,
-    tgs2602_raw: i16,
-    tgs2611_raw: i16,
-    tgs2620_raw: i16,
-    mq3_v: f32,
-    mq6_v: f32,
-    mq7_v: f32,
-    mq135_v: f32,
-    tgs2600_v: f32,
-    tgs2602_v: f32,
-    tgs2611_v: f32,
-    tgs2620_v: f32,
+    mq3: f32,
+    mq6: f32,
+    mq7: f32,
+    mq135: f32,
+    tgs2600: f32,
+    tgs2602: f32,
+    tgs2611: f32,
+    tgs2620: f32,
     temp_c: f32,
     rh_pct: f32,
     dht_age_s: u64,
@@ -278,7 +281,7 @@ async fn main(spawner: Spawner) -> ! {
     esp_hal_embassy::init(timg1.timer0);
 
     esp_println::println!(
-        "Coffee E-Nose DAQ siap. Mencetak \"DATA,t_s,mq3_raw,mq6_raw,mq7_raw,mq135_raw,tgs2600_raw,tgs2602_raw,tgs2611_raw,tgs2620_raw,mq3_v,mq6_v,mq7_v,mq135_v,tgs2600_v,tgs2602_v,tgs2611_v,tgs2620_v,temp_c,rh_pct,dht_age_s\" tiap 1 detik."
+        "Coffee E-Nose DAQ siap. Mencetak \"DATA,t_s,mq3,mq6,mq7,mq135,tgs2600,tgs2602,tgs2611,tgs2620,temp_c,rh_pct,dht_age_s\" tiap 1 detik."
     );
 
     // Sensor gas jalan independen dari WiFi/MQTT - tetap baca & log ke
@@ -446,18 +449,14 @@ async fn mqtt_task(
                     // dari loop ini). Kalau belum ada bacaan sama sekali
                     // (baru banget boot), skip publish ronde ini saja.
                     if let Some(r) = READING.try_take() {
-                        let mut payload: HString<512> = HString::new();
+                        let mut payload: HString<256> = HString::new();
                         let _ = write!(
                             payload,
-                            "{{\"mq3_raw\":{},\"mq6_raw\":{},\"mq7_raw\":{},\"mq135_raw\":{},\
-                             \"tgs2600_raw\":{},\"tgs2602_raw\":{},\"tgs2611_raw\":{},\"tgs2620_raw\":{},\
-                             \"mq3_v\":{:.4},\"mq6_v\":{:.4},\"mq7_v\":{:.4},\"mq135_v\":{:.4},\
-                             \"tgs2600_v\":{:.4},\"tgs2602_v\":{:.4},\"tgs2611_v\":{:.4},\"tgs2620_v\":{:.4},\
+                            "{{\"mq3\":{:.4},\"mq6\":{:.4},\"mq7\":{:.4},\"mq135\":{:.4},\
+                             \"tgs2600\":{:.4},\"tgs2602\":{:.4},\"tgs2611\":{:.4},\"tgs2620\":{:.4},\
                              \"temp_c\":{},\"rh_pct\":{},\"dht_age_s\":{}}}",
-                            r.mq3_raw, r.mq6_raw, r.mq7_raw, r.mq135_raw,
-                            r.tgs2600_raw, r.tgs2602_raw, r.tgs2611_raw, r.tgs2620_raw,
-                            r.mq3_v, r.mq6_v, r.mq7_v, r.mq135_v,
-                            r.tgs2600_v, r.tgs2602_v, r.tgs2611_v, r.tgs2620_v,
+                            r.mq3, r.mq6, r.mq7, r.mq135,
+                            r.tgs2600, r.tgs2602, r.tgs2611, r.tgs2620,
                             r.temp_c, r.rh_pct, r.dht_age_s,
                         );
 
@@ -513,15 +512,13 @@ fn raw_to_volts(raw: i16) -> f32 {
 /// dokumen instruksi CBP §10.4 eksplisit minta "timer monotonik... bukan
 /// delay berantai" supaya waktu proses baca ADC/DHT22 tidak menumpuk jadi
 /// drift antar sampel), cetak ke serial sebagai baris CSV
-/// "DATA,t_s,mq3_raw,...,tgs2620_raw,mq3_v,...,tgs2620_v,temp_c,rh_pct,dht_age_s"
-/// DAN simpan ke `READING` buat dikirim MQTT kalau connect (lihat
-/// `mqtt_task`). Task ini TIDAK bergantung sama sekali ke WiFi/MQTT - tetap
-/// jalan walau keduanya gagal, supaya logging lokal per-percobaan (lihat
-/// tools/record_sample.ps1) tidak ikut kena dampak masalah jaringan/cloud.
-/// Kolom mengikuti skema data mentah dokumen instruksi CBP §17.4 (raw ADC
-/// code DAN tegangan hasil konversi, keduanya disimpan - lihat §17.5 poin 1)
-/// dikurangi kolom `timestamp` absolut yang ditambahkan host lewat
-/// tools/record_sample.ps1, bukan di sini.
+/// "DATA,t_s,mq3,mq6,mq7,mq135,tgs2600,tgs2602,tgs2611,tgs2620,temp_c,rh_pct,dht_age_s"
+/// (kanal gas dalam VOLT hasil konversi, bukan raw ADC code lagi - lihat
+/// catatan kepatuhan §17.5 di `GasReading`) DAN simpan ke `READING` buat
+/// dikirim MQTT kalau connect (lihat `mqtt_task`). Task ini TIDAK
+/// bergantung sama sekali ke WiFi/MQTT - tetap jalan walau keduanya gagal,
+/// supaya logging lokal per-percobaan (lihat tools/record_sample.ps1)
+/// tidak ikut kena dampak masalah jaringan/cloud.
 #[embassy_executor::task]
 async fn sensor_task(i2c: I2c<'static, esp_hal::Blocking>, mut dht_pin: Flex<'static>) {
     let i2c_bus = RefCell::new(i2c);
@@ -565,14 +562,14 @@ async fn sensor_task(i2c: I2c<'static, esp_hal::Blocking>, mut dht_pin: Flex<'st
     let mut t_s: u64 = 0;
 
     loop {
-        let mq6_raw = block!(adc_a.read(channel::SingleA0)).unwrap_or(0);
-        let mq135_raw = block!(adc_a.read(channel::SingleA1)).unwrap_or(0);
-        let mq3_raw = block!(adc_a.read(channel::SingleA2)).unwrap_or(0);
-        let mq7_raw = block!(adc_a.read(channel::SingleA3)).unwrap_or(0);
-        let tgs2611_raw = block!(adc_b.read(channel::SingleA0)).unwrap_or(0);
-        let tgs2602_raw = block!(adc_b.read(channel::SingleA1)).unwrap_or(0);
-        let tgs2600_raw = block!(adc_b.read(channel::SingleA2)).unwrap_or(0);
-        let tgs2620_raw = block!(adc_b.read(channel::SingleA3)).unwrap_or(0);
+        let mq6 = raw_to_volts(block!(adc_a.read(channel::SingleA0)).unwrap_or(0));
+        let mq135 = raw_to_volts(block!(adc_a.read(channel::SingleA1)).unwrap_or(0));
+        let mq3 = raw_to_volts(block!(adc_a.read(channel::SingleA2)).unwrap_or(0));
+        let mq7 = raw_to_volts(block!(adc_a.read(channel::SingleA3)).unwrap_or(0));
+        let tgs2611 = raw_to_volts(block!(adc_b.read(channel::SingleA0)).unwrap_or(0));
+        let tgs2602 = raw_to_volts(block!(adc_b.read(channel::SingleA1)).unwrap_or(0));
+        let tgs2600 = raw_to_volts(block!(adc_b.read(channel::SingleA2)).unwrap_or(0));
+        let tgs2620 = raw_to_volts(block!(adc_b.read(channel::SingleA3)).unwrap_or(0));
 
         let should_poll_dht = match last_dht_attempt {
             None => true,
@@ -593,38 +590,20 @@ async fn sensor_task(i2c: I2c<'static, esp_hal::Blocking>, mut dht_pin: Flex<'st
             .map(|t| t.elapsed().as_secs())
             .unwrap_or(u64::MAX);
 
-        let mq3_v = raw_to_volts(mq3_raw);
-        let mq6_v = raw_to_volts(mq6_raw);
-        let mq7_v = raw_to_volts(mq7_raw);
-        let mq135_v = raw_to_volts(mq135_raw);
-        let tgs2600_v = raw_to_volts(tgs2600_raw);
-        let tgs2602_v = raw_to_volts(tgs2602_raw);
-        let tgs2611_v = raw_to_volts(tgs2611_raw);
-        let tgs2620_v = raw_to_volts(tgs2620_raw);
-
         esp_println::println!(
-            "DATA,{t_s},{mq3_raw},{mq6_raw},{mq7_raw},{mq135_raw},{tgs2600_raw},{tgs2602_raw},{tgs2611_raw},{tgs2620_raw},\
-             {mq3_v:.4},{mq6_v:.4},{mq7_v:.4},{mq135_v:.4},{tgs2600_v:.4},{tgs2602_v:.4},{tgs2611_v:.4},{tgs2620_v:.4},\
+            "DATA,{t_s},{mq3:.4},{mq6:.4},{mq7:.4},{mq135:.4},{tgs2600:.4},{tgs2602:.4},{tgs2611:.4},{tgs2620:.4},\
              {held_temp_c},{held_rh_pct},{dht_age_s}"
         );
 
         READING.signal(GasReading {
-            mq3_raw,
-            mq6_raw,
-            mq7_raw,
-            mq135_raw,
-            tgs2600_raw,
-            tgs2602_raw,
-            tgs2611_raw,
-            tgs2620_raw,
-            mq3_v,
-            mq6_v,
-            mq7_v,
-            mq135_v,
-            tgs2600_v,
-            tgs2602_v,
-            tgs2611_v,
-            tgs2620_v,
+            mq3,
+            mq6,
+            mq7,
+            mq135,
+            tgs2600,
+            tgs2602,
+            tgs2611,
+            tgs2620,
             temp_c: held_temp_c,
             rh_pct: held_rh_pct,
             dht_age_s,

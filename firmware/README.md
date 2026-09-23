@@ -17,12 +17,12 @@ connect).
 > kepala [`src/main.rs`](src/main.rs) untuk alasannya — intinya: fitur itu
 > perlu partition table custom yang belum divalidasi ulang di iterasi ini).
 >
-> **Bagian WiFi/MQTT belum di-flash ulang** setelah digabung — logic-nya
-> identik dengan versi yang sudah terbukti jalan sebelumnya, tapi belum
-> dicoba lagi di board fisik pada struktur kode yang baru. Bagian sensor
-> (ADS1115/DHT22/scan I2C) statusnya masih sama seperti sebelumnya: sudah
-> boot bersih di board tanpa sensor, belum dicoba dengan sensor fisik
-> tersambung.
+> **Update: WiFi+MQTT sudah dicoba ulang di hardware dan BERHASIL** —
+> log serial menunjukkan rantai penuh `WiFi connected!` → dapat IP DHCP →
+> `MQTT connected ke ThingsBoard`, telemetry publish tiap 5 detik. Bagian
+> sensor (ADS1115/DHT22/scan I2C) statusnya masih sama seperti sebelumnya:
+> sudah boot bersih di board tanpa sensor, belum dicoba dengan sensor
+> fisik tersambung (menyusul dipasang).
 
 ## Protokol pengambilan data
 
@@ -92,8 +92,8 @@ yang terpasang, dan pastikan tidak melebihi batas aman sebelum menyalakan.
    + reflash. Tidak ada cara ganti tanpa reflash di versi ini (lihat catatan
    di kepala [`src/main.rs`](src/main.rs)).
 6. Cek data masuk: device → tab **Latest telemetry**, harus muncul field
-   seperti `mq3_raw`, `mq3_v`, `temp_c`, dst. ter-update tiap ±5 detik
-   setelah board connect WiFi.
+   seperti `mq3`, `temp_c`, dst. ter-update tiap ±5 detik setelah board
+   connect WiFi.
 
 ESP32-S3 cuma dukung **WiFi 2,4GHz** (bukan 5GHz), dan butuh keamanan
 WPA2-AES (WPA/WPA2-TKIP versi lama kadang tidak didukung).
@@ -146,19 +146,27 @@ Satu baris CSV per detik, jadwal absolut lewat `embassy_time::Ticker` (bukan
 jadi drift antar sampel — dokumen instruksi §10.4):
 
 ```
-DATA,t_s,mq3_raw,mq6_raw,mq7_raw,mq135_raw,tgs2600_raw,tgs2602_raw,tgs2611_raw,tgs2620_raw,mq3_v,mq6_v,mq7_v,mq135_v,tgs2600_v,tgs2602_v,tgs2611_v,tgs2620_v,temp_c,rh_pct,dht_age_s
+DATA,t_s,mq3,mq6,mq7,mq135,tgs2600,tgs2602,tgs2611,tgs2620,temp_c,rh_pct,dht_age_s
 ```
 
 - `t_s`: penghitung sampel (0, 1, 2, ...) sejak `sensor_task` mulai jalan —
   bukan wall-clock, dipakai sebagai waktu relatif dalam satu sesi perekaman
   (dokumen instruksi §17.4).
-- `*_raw`: kode ADC mentah (16-bit signed) dari 2x ADS1115. Kalau ADC gagal
-  dibaca (wiring/alamat I2C salah), nilainya `0` (fallback, bukan error
-  fatal — dicatat lewat `warn!` ke log).
-- `*_v`: `*_raw` dikonversi ke volt memakai LSB pada `FullScaleRange::
-  Within4_096V` yang di-set saat init (4,096 V / 2^15 per bit). Dokumen
-  instruksi §17.5 poin 1 minta raw ADC **dan** tegangan hasil konversi
-  sama-sama disimpan, bukan salah satu saja.
+- `mq3`..`tgs2620`: kanal gas dalam **volt** (hasil konversi dari raw ADC
+  code memakai LSB pada `FullScaleRange::Within4_096V`, 4,096 V / 2^15 per
+  bit) — bukan raw ADC code lagi (keputusan eksplisit 2026-09-23, demi
+  kesederhanaan satu nilai per kanal). Kalau ADC gagal dibaca (wiring/
+  alamat I2C salah), nilainya `0.0000` (fallback, bukan error fatal —
+  dicatat lewat `warn!` ke log).
+  > ⚠️ **Catatan kepatuhan:** dokumen instruksi CBP §17.5 poin 1 sebenarnya
+  > minta raw ADC code **dan** tegangan hasil konversi disimpan berdua,
+  > bukan salah satu saja ("Engineering-unit data ... disimpan sebagai
+  > turunan, bukan pengganti data mentah"). Dengan cuma volt yang
+  > disimpan, ini **tidak sepenuhnya sesuai §17.5** — raw code bisa
+  > dihitung balik (`raw = volt / (4.096/32768)`) selama FullScaleRange
+  > tidak berubah, tapi itu bukan hal yang sama dengan menyimpan data
+  > mentahnya langsung. Kalau laporan akhir perlu strict sesuai §17.5,
+  > beri tahu saya untuk dikembalikan ke dua kolom.
 - `temp_c`, `rh_pct`: pembacaan DHT22 terakhir yang berhasil (di-hold antar
   pembacaan karena DHT22 maksimum 0,5 Hz — lihat dokumen instruksi §9.2).
   `NaN` kalau belum pernah berhasil membaca sama sekali.
@@ -175,10 +183,8 @@ Field sama seperti CSV (minus `t_s`), dikirim sebagai JSON ke topic
 `v1/devices/me/telemetry` tiap 5 detik kalau WiFi+MQTT connect:
 
 ```json
-{"mq3_raw":12345,"mq6_raw":12000,"mq7_raw":11800,"mq135_raw":12500,
- "tgs2600_raw":9000,"tgs2602_raw":8700,"tgs2611_raw":9200,"tgs2620_raw":8950,
- "mq3_v":1.5430,"mq6_v":1.5000,"mq7_v":1.4750,"mq135_v":1.5625,
- "tgs2600_v":1.1250,"tgs2602_v":1.0875,"tgs2611_v":1.1500,"tgs2620_v":1.1188,
+{"mq3":1.5430,"mq6":1.5000,"mq7":1.4750,"mq135":1.5625,
+ "tgs2600":1.1250,"tgs2602":1.0875,"tgs2611":1.1500,"tgs2620":1.1188,
  "temp_c":29.4,"rh_pct":62.1,"dht_age_s":1}
 ```
 
