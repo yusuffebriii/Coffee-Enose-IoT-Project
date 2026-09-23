@@ -118,15 +118,20 @@ $env:PATH = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';'
 . "$HOME\export-esp.ps1"
 cd firmware
 cargo build --release
-espflash flash --port COM5 --monitor target/xtensa-esp32s3-none-elf/release/coffee-enose-firmware
+espflash flash --port COM5 --monitor --partition-table ./partitions.csv --erase-parts otadata target/xtensa-esp32s3-none-elf/release/coffee-enose-firmware
 ```
 
 Ganti `COM5` sesuai port board Anda (cek lewat
-`Get-PnpDevice -Class Ports -PresentOnly`). Runner di
-[`.cargo/config.toml`](.cargo/config.toml) sudah otomatis menyertakan
-`--partition-table ./partitions.csv --erase-parts otadata` (wajib untuk
-OTA — partition table default "factory" tunggal TIDAK akan berfungsi
-dengan `esp-hal-ota`).
+`Get-PnpDevice -Class Ports -PresentOnly`).
+
+> ⚠️ **`--partition-table ./partitions.csv --erase-parts otadata` HARUS
+> ditulis eksplisit** kalau Anda menjalankan `espflash flash` langsung
+> seperti di atas. Argumen yang sama di runner
+> [`.cargo/config.toml`](.cargo/config.toml) cuma otomatis terpakai kalau
+> Anda pakai `cargo run --release -- ...` (bukan `espflash flash` manual)
+> — lupa menyertakan ini bikin board tetap pakai partition table lama
+> (single "factory") dan firmware **panic saat boot** dengan pesan "Gagal
+> inisialisasi OTA ... NotEnoughPartitions".
 
 Build akan **gagal** kalau `wifi_config.txt` belum ada — lihat bagian
 "Setup WiFi & ThingsBoard" di atas.
