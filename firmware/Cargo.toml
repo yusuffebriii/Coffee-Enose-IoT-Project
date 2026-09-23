@@ -37,7 +37,12 @@ esp-storage = { version = "=0.4.0", features = ["esp32s3"] }
 esp-hal-ota = { version = "=0.4.1", features = ["esp32s3"] }
 embedded-storage = "0.3.1"
 
-embassy-executor = { version = "=0.7.0", features = ["task-arena-size-20480"] }
+# Dinaikkan dari 20480 - MQTT_BUF_SIZE 12288 x 4 buffer di mqtt_task saja
+# sudah ~49KB, ketemu langsung sebagai panic "task arena is full" di
+# hardware (2026-09-23). 98304 dikasih margin jauh lebih longgar dari
+# kebutuhan minimum supaya tidak perlu iterasi berkali-kali lagi kalau
+# masih kurang.
+embassy-executor = { version = "=0.7.0", features = ["task-arena-size-98304"] }
 embassy-time = "=0.4.0"
 embassy-net = { version = "=0.7.0", features = [
     "tcp",
