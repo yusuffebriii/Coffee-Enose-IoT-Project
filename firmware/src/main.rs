@@ -600,6 +600,7 @@ async fn mqtt_task(
                                 let ota_result: Result<(), ReasonCode> = async {
                                     ota.ota_begin(update.size, update.checksum_crc32)
                                         .map_err(|_| ReasonCode::UnspecifiedError)?;
+                                    info!("OTA: mulai download {} bytes...", update.size);
 
                                     client
                                         .subscribe_to_topic("v2/fw/response/+/chunk/+")
@@ -607,6 +608,7 @@ async fn mqtt_task(
 
                                     let request_id: u32 = 1;
                                     let mut chunk_index: u32 = 0;
+                                    let mut total_bytes: u32 = 0;
 
                                     loop {
                                         let mut req_topic: HString<64> = HString::new();
@@ -647,6 +649,12 @@ async fn mqtt_task(
                                             }
                                         };
 
+                                        total_bytes += chunk_len as u32;
+                                        info!(
+                                            "OTA: chunk {chunk_index} diterima ({chunk_len} bytes, total {total_bytes}/{} bytes)",
+                                            update.size
+                                        );
+
                                         // ASUMSI belum terverifikasi penuh (2026-09-23):
                                         // logic ini anggap ThingsBoard selalu balas
                                         // persis OTA_CHUNK_SIZE byte kecuali chunk
@@ -668,6 +676,7 @@ async fn mqtt_task(
                                         chunk_index += 1;
                                     }
 
+                                    info!("OTA: download selesai, verifikasi checksum...");
                                     ota.ota_flush(true, true)
                                         .map_err(|_| ReasonCode::UnspecifiedError)
                                 }
