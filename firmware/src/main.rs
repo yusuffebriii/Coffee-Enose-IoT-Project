@@ -186,7 +186,7 @@ const MQTT_BUF_SIZE: usize = 12288;
 // CURRENT_FW_VERSION tiap kali build firmware baru yang mau diupload
 // sebagai OTA package, supaya beda dari versi yang sedang jalan.
 const CURRENT_FW_TITLE: &str = "coffee-enose";
-const CURRENT_FW_VERSION: &str = "2.0.0";
+const CURRENT_FW_VERSION: &str = "2.1.2";
 
 /// Sensor lingkungan tidak boleh dibaca lebih cepat dari ini (dokumen
 /// instruksi CBP §9.2: DHT22 maksimum 0,5 Hz). Nilai lama di-hold di antara
@@ -589,6 +589,16 @@ async fn mqtt_task(
                     {
                         if let Ok(text) = core::str::from_utf8(payload) {
                             if let Some(update) = parse_fw_update(text) {
+                                if update.title == CURRENT_FW_TITLE
+                                    && update.version == CURRENT_FW_VERSION
+                                {
+                                    info!(
+                                        "OTA: {} v{} sudah versi yang jalan sekarang, skip download",
+                                        update.title, update.version
+                                    );
+                                    continue;
+                                }
+
                                 info!(
                                     "OTA package terdeteksi: {} v{} ({} bytes)",
                                     update.title, update.version, update.size
