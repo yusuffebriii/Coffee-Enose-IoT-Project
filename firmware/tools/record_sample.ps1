@@ -1,9 +1,10 @@
 <#
 Rekam data 8 sensor gas (MQ-3, MQ-6, MQ-7, MQ-135, TGS2600, TGS2602,
-TGS2611, TGS2620 - lewat 2x ADS1115) dari ESP32-S3 ke file CSV, satu file
-per percobaan. Firmware harus sudah ter-flash dan mencetak baris
-"DATA,mq3,mq6,mq7,mq135,tgs2600,tgs2602,tgs2611,tgs2620" ke serial (lihat
-sensor_task di src/main.rs) - ini jalan independen dari status WiFi/ThingsBoard.
+TGS2611, TGS2620 - lewat 2x ADS1115, raw ADC code + tegangan hasil konversi)
++ 1x DHT22 (temperatur/kelembapan) dari ESP32-S3 ke file CSV, satu file per
+percobaan. Firmware harus sudah ter-flash dan mencetak baris
+"DATA,t_s,mq3_raw,mq6_raw,mq7_raw,mq135_raw,tgs2600_raw,tgs2602_raw,tgs2611_raw,tgs2620_raw,mq3_v,mq6_v,mq7_v,mq135_v,tgs2600_v,tgs2602_v,tgs2611_v,tgs2620_v,temp_c,rh_pct,dht_age_s"
+ke serial (lihat sensor_task di src/main.rs).
 
 Skenario: 10x percobaan, masing-masing 100 gram kopi, direkam 300 detik.
 
@@ -59,7 +60,7 @@ $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $safeSampleName = $SampleName -replace '[^a-zA-Z0-9_\-]', '_'
 $outFile = Join-Path $rawDataDir "$safeSampleName`_$timestamp.csv"
 
-"timestamp,mq3,mq6,mq7,mq135,tgs2600,tgs2602,tgs2611,tgs2620" | Out-File -FilePath $outFile -Encoding utf8
+"timestamp,t_s,mq3_raw,mq6_raw,mq7_raw,mq135_raw,tgs2600_raw,tgs2602_raw,tgs2611_raw,tgs2620_raw,mq3_v,mq6_v,mq7_v,mq135_v,tgs2600_v,tgs2602_v,tgs2611_v,tgs2620_v,temp_c,rh_pct,dht_age_s" | Out-File -FilePath $outFile -Encoding utf8
 
 $serialPort = New-Object System.IO.Ports.SerialPort $Port, 115200, ([System.IO.Ports.Parity]::None), 8, ([System.IO.Ports.StopBits]::One)
 $serialPort.NewLine = "`n"

@@ -3,13 +3,12 @@ target = "xtensa-esp32s3-none-elf"
 rustflags = ["-C", "link-arg=-Tlinkall.x", "-C", "link-arg=-nostartfiles"]
 
 [target.xtensa-esp32s3-none-elf]
-runner = "espflash flash --monitor --partition-table ./partitions.csv --erase-parts otadata"
+# Partition table default (single "factory") cukup - tidak ada OTA lagi di
+# firmware ini (lihat catatan rewrite di src/main.rs).
+runner = "espflash flash --monitor"
 
 [env]
 ESP_LOG = "INFO"
-# SSID/PASSWORD/TB_HOST/TB_TOKEN TIDAK di-set di sini lagi - diambil
-# otomatis oleh build.rs dari file firmware/wifi_config.txt (copy dari
-# wifi_config.example.txt). Edit file itu langsung, tidak perlu env var.
 
 [unstable]
 build-std = ["core", "alloc"]
