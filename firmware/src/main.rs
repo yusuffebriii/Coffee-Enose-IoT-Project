@@ -19,8 +19,9 @@
 // sampel 1 Hz terus-menerus, host yang menentukan jendela 300 detik per
 // percobaan.
 //
-// Pemetaan sensor -> ADS1115 & pin I2C mengikuti acuan repo referensi
-// github.com/renorzz/TA-Rafi-Cepmek (README §3.2):
+// Pemetaan sensor -> ADS1115, pin I2C, dan pin DHT22 mengikuti acuan repo
+// referensi github.com/renorzz/TA-Rafi-Cepmek (README, tabel mapping
+// sensor & GPIO - dibaca ulang lengkap 2026-09-23, bukan cuma §3.2):
 //   - I2C bus: SDA=GPIO8, SCL=GPIO9, 400 kHz (fast mode, sesuai README repo
 //     referensi - default esp-hal sebenarnya 100 kHz, di-override eksplisit
 //     di main()).
@@ -40,11 +41,15 @@
 //
 // DHT22: 1 unit (sesuai dokumen instruksi CBP §9.2 - sistem kelas ini pasif/
 // statis dengan 1 sensor lingkungan, BEDA dari repo referensi yang pakai 2
-// unit DHT22 untuk sistem alir aktif mereka). Dibaca lewat 1 pin open-drain,
-// interval baca >=2 detik (batas laju sensor, lihat §9.2), nilai di-hold ke
-// grid 1 Hz kanal gas - `dht_age_s` pada tiap baris CSV menyatakan usia
-// (detik) pembacaan DHT22 terakhir yang sedang di-hold, supaya penyelarasan
-// waktu bisa diaudit (lihat dokumen instruksi §17.4).
+// unit DHT22 untuk sistem alir aktif mereka: GPIO10 "Suhu & Kelembaban
+// Ruang Chamber" dan GPIO11 "Suhu & Kelembaban Ambien"). Kelompok ini pakai
+// GPIO10 - posisinya (ruang chamber, antara array sensor gas & sample
+// chamber) paling cocok dengan deskripsi posisi DHT22 di §9.2; ganti ke
+// GPIO11 kalau wiring fisik Anda ternyata di posisi ambien. Dibaca lewat 1
+// pin open-drain, interval baca >=2 detik (batas laju sensor, lihat §9.2),
+// nilai di-hold ke grid 1 Hz kanal gas - `dht_age_s` pada tiap baris CSV
+// menyatakan usia (detik) pembacaan DHT22 terakhir yang sedang di-hold,
+// supaya penyelarasan waktu bisa diaudit (lihat dokumen instruksi §17.4).
 //
 // Status hardware (2026-09-23): sudah di-flash ke ESP32-S3 asli dan
 // TERBUKTI BOOT + JALAN (log serial bersih, Ticker 1Hz stabil, tidak
@@ -59,8 +64,10 @@
 //    dokumen instruksi CBP (7 langkah verifikasi tegangan + scan bus I2C -
 //    langkah scan-nya otomatis tercetak tiap boot lewat `i2c_bus_scan`)
 //    SEBELUM menyambungkan sensor ke ADC dengan tegangan sungguhan.
-//  - Sesuaikan pin I2C (SDA/SCL) & pin DHT22 (GPIO4 di bawah cuma TEBAKAN
-//    awal, GANTI sesuai wiring board Anda) kalau beda dari asumsi di atas.
+//  - Sesuaikan pin I2C (SDA/SCL) & pin DHT22 (GPIO10 di bawah dari data
+//    repo referensi, GANTI ke GPIO11 kalau DHT22 Anda di posisi ambien,
+//    bukan ruang chamber - lihat catatan DHT22 di atas) kalau beda dari
+//    wiring board Anda.
 //  - Sesuaikan FullScaleRange ADS1115 dengan rentang tegangan output sensor
 //    setelah signal conditioning (lihat dokumen instruksi §10.3).
 //  - Konfirmasi urutan channel AIN0-AIN3 tiap modul ADS1115 cocok dengan
@@ -155,10 +162,18 @@ async fn main(spawner: Spawner) -> ! {
     // pin yang bisa gantian jadi input/output - Flex + DriveMode::OpenDrain
     // + set_input_enable(true) supaya satu pin fisik mengimplementasikan
     // embedded_hal::digital::{InputPin, OutputPin} sekaligus, seperti yang
-    // diminta crate dht-sensor). GPIO4 = TEBAKAN AWAL, ganti sesuai wiring
-    // board Anda.
+    // diminta crate dht-sensor).
+    //
+    // GPIO10 dipakai (BUKAN GPIO4 tebakan sebelumnya) - repo referensi
+    // TA-Rafi-Cepmek pakai 2x DHT22: GPIO10 "Suhu & Kelembaban Ruang
+    // Chamber" dan GPIO11 "Suhu & Kelembaban Ambien". Kelompok ini cuma
+    // pakai 1 DHT22 (sesuai dokumen instruksi §9.2), dan GPIO10 dipilih
+    // karena posisinya (di ruang chamber, antara array sensor gas & sample
+    // chamber) PALING COCOK dengan deskripsi §9.2: "DHT22 berada di antara
+    // array sensor gas dan sample chamber". Kalau wiring fisik kelompok ini
+    // ternyata DHT22-nya di posisi ambien/luar chamber, ganti ke GPIO11.
     let mut dht_pin = Output::new(
-        peripherals.GPIO4,
+        peripherals.GPIO10,
         Level::High,
         OutputConfig::default()
             .with_drive_mode(DriveMode::OpenDrain)

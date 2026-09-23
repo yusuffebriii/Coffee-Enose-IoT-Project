@@ -36,10 +36,11 @@ menentukan jendela 300 detik per percobaan.
 
 ## Wiring
 
-Pemetaan sensor → ADS1115 mengikuti acuan repo referensi
-[`TA-Rafi-Cepmek`](https://github.com/renorzz/TA-Rafi-Cepmek#32-pemetaan-sensor-gas-ke-ads1115-i2c-adc-16-bit)
-(README §3.2) — **belum diverifikasi ke hardware kelompok ini sendiri**,
-lihat peringatan di [`src/main.rs`](src/main.rs).
+Pemetaan sensor → ADS1115/DHT22 mengikuti acuan repo referensi
+[`TA-Rafi-Cepmek`](https://github.com/renorzz/TA-Rafi-Cepmek) (dibaca
+lengkap dari README-nya, bukan cuma bagian ADS1115) — **belum
+diverifikasi ke hardware kelompok ini sendiri**, lihat peringatan di
+[`src/main.rs`](src/main.rs).
 
 | ESP32-S3 | ADS1115 #1 (`0x48`, ADDR→GND) | ADS1115 #2 (`0x49`, ADDR→VDD) |
 |----------|-------------------------------|-------------------------------|
@@ -55,10 +56,14 @@ lihat peringatan di [`src/main.rs`](src/main.rs).
 | AIN2                          | MQ-3    | AIN2                          | TGS2600 |
 | AIN3                          | MQ-7    | AIN3                          | TGS2620 |
 
-DHT22 (1 unit, sesuai dokumen instruksi CBP §9.2): pin data ke **GPIO4**
-(tebakan awal, ganti sesuai wiring board Anda) lewat resistor pull-up
-(~4.7–10kΩ ke 3V3) atau andalkan pull-up internal yang sudah diaktifkan
-firmware.
+DHT22 (1 unit, sesuai dokumen instruksi CBP §9.2): pin data ke **GPIO10**
+lewat resistor pull-up (~4.7–10kΩ ke 3V3) atau andalkan pull-up internal
+yang sudah diaktifkan firmware. Repo referensi pakai 2x DHT22 (GPIO10 =
+"Suhu & Kelembaban Ruang Chamber", GPIO11 = "Suhu & Kelembaban Ambien");
+kelompok ini cuma 1 unit dan GPIO10 dipilih karena posisinya paling cocok
+dengan deskripsi §9.2 (di antara array sensor gas dan sample chamber) —
+**ganti ke GPIO11 kalau DHT22 Anda sebenarnya di posisi ambien/luar
+chamber.**
 
 **Sebelum menyambungkan sensor ke ADS1115**, ikuti Lampiran C dokumen
 instruksi CBP: baca datasheet ADS1115 untuk batas tegangan input relatif
