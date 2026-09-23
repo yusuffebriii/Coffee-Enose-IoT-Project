@@ -141,7 +141,7 @@ use esp_hal::{
     time::Rate,
     timer::timg::TimerGroup,
 };
-use esp_hal_ota::Ota;
+use esp_hal_ota::{crc32::calc_crc32, Ota};
 use esp_storage::FlashStorage;
 use esp_wifi::{
     init,
@@ -609,6 +609,18 @@ async fn mqtt_task(
                                     let request_id: u32 = 1;
                                     let mut chunk_index: u32 = 0;
                                     let mut total_bytes: u32 = 0;
+                                    // CRC32 kita hitung sendiri secara independen dari
+                                    // esp-hal-ota (yang punya versi internalnya sendiri,
+                                    // `progress.last_crc`, tapi tidak diekspos publik) -
+                                    // supaya bisa dibandingkan manual ke `update.
+                                    // checksum_crc32` SEBELUM ota_flush(). ota_verify()
+                                    // milik esp-hal-ota membaca ULANG dari flash lalu
+                                    // membandingkan ke target_crc, dan gagal duluan di
+                                    // situ kalau tidak cocok - artinya log pembanding
+                                    // "Calculated crc"/"Target crc" internalnya sendiri
+                                    // TIDAK PERNAH tercapai (short-circuit). Log manual
+                                    // ini mengisi kekosongan itu.
+                                    let mut running_crc: u32 = 0;
 
                                     loop {
                                         let mut req_topic: HString<64> = HString::new();
@@ -644,6 +656,8 @@ async fn mqtt_task(
                                                     ota.ota_write_chunk(chunk_payload).map_err(
                                                         |_| ReasonCode::UnspecifiedError,
                                                     )?;
+                                                    running_crc =
+                                                        calc_crc32(chunk_payload, running_crc);
                                                 }
                                                 break chunk_payload.len();
                                             }
@@ -655,28 +669,25 @@ async fn mqtt_task(
                                             update.size
                                         );
 
-                                        // ASUMSI belum terverifikasi penuh (2026-09-23):
-                                        // logic ini anggap ThingsBoard selalu balas
-                                        // persis OTA_CHUNK_SIZE byte kecuali chunk
-                                        // TERAKHIR (lebih pendek) - itu yang dipakai
-                                        // sebagai penanda "selesai". Tapi sudah
-                                        // kebukti sekali ThingsBoard bisa balas LEBIH
-                                        // BESAR dari yang diminta (lihat catatan
-                                        // MQTT_BUF_SIZE) - kalau itu juga terjadi di
-                                        // sini, chunk_len tidak akan pernah <
-                                        // OTA_CHUNK_SIZE dan loop bisa tidak pernah
-                                        // berhenti wajar (baru berhenti kalau
-                                        // ota_write_chunk menolak karena ota_size
-                                        // terlampaui, atau MQTT_BUF_SIZE kelampaui
-                                        // lagi). Awasi log OTA berikutnya untuk
-                                        // konfirmasi/perbaikan lebih lanjut.
+                                        // KONFIRMASI (2026-09-23): logic "chunk_len <
+                                        // OTA_CHUNK_SIZE = selesai" sudah terbukti benar
+                                        // di percobaan hardware pertama yang download-nya
+                                        // sampai tuntas - 148 chunk penuh 4096 byte lalu
+                                        // 1 chunk terakhir 1968 byte (608176 % 4096),
+                                        // total persis cocok dengan update.size. Insiden
+                                        // chunk 7025-byte di percobaan SEBELUM MQTT_BUF_SIZE
+                                        // dinaikkan tidak terulang lagi di sini.
                                         if chunk_len == 0 || chunk_len < OTA_CHUNK_SIZE {
                                             break;
                                         }
                                         chunk_index += 1;
                                     }
 
-                                    info!("OTA: download selesai, verifikasi checksum...");
+                                    info!(
+                                        "OTA: download selesai. CRC32 kita: 0x{running_crc:08X}, target dari ThingsBoard: 0x{:08X} ({})",
+                                        update.checksum_crc32,
+                                        if running_crc == update.checksum_crc32 { "COCOK" } else { "TIDAK COCOK" }
+                                    );
                                     ota.ota_flush(true, true)
                                         .map_err(|_| ReasonCode::UnspecifiedError)
                                 }
