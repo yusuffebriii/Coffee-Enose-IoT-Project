@@ -1,6 +1,6 @@
 # Coffee E-Nose — Klasifikasi Jenis Kopi via Electronic Nose
 
-**Kelompok:** G-07
+**Kelompok:** 7
 
 ## Deskripsi
 
