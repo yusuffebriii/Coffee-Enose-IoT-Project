@@ -8,6 +8,7 @@
 \usepackage[a4paper,left=4cm,top=4cm,right=3cm,bottom=3cm]{geometry}
 \usepackage{setspace}
 \usepackage{graphicx}
+\usepackage{svg}
 \usepackage{xcolor}
 \usepackage{listings}
 \usepackage{longtable}
@@ -15,6 +16,7 @@
 \usepackage{enumitem}
 \usepackage{hyperref}
 \usepackage{caption}
+\usepackage{float} % Paket untuk posisi gambar presisi [H]
 
 \hypersetup{
     colorlinks=true,
@@ -26,6 +28,12 @@
 }
 
 \onehalfspacing
+
+% Optimasi penempatan gambar agar tidak membuat halaman kosong
+\renewcommand{\topfraction}{0.85}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.15}
+\renewcommand{\floatpagefraction}{0.7}
 
 % ================= KONFIGURASI LISTING KODE =================
 \definecolor{codebg}{rgb}{0.96,0.96,0.96}
@@ -70,41 +78,35 @@
     \singlespacing
     \vspace*{0.5cm}
 
-    % Ganti dengan logo institusi Anda jika ada, atau hapus baris di bawah ini.
-    % \includegraphics[width=3.5cm]{logo-kampus.png}\\[1cm]
-
     {\bfseries LAPORAN EVALUASI TENGAH SEMESTER (ETS)\\PROJECT-BASED LEARNING (PBL)\par}
     \vspace{4pt}
-    {Mata Kuliah: Sistem Pengolahan Sinyal\par}
+    {Mata Kuliah: Teknologi IoT\par}
 
     \vspace{1.8cm}
 
-    {\bfseries\Large SISTEM AKUISISI DATA ELECTRONIC NOSE (E-NOSE) DAN\\
-    OTA (OVER-THE-AIR) FIRMWARE UPDATE BERBASIS ESP32-S3\\
-    DAN THINGSBOARD CLOUD\par}
+    {\bfseries\Large SISTEM AKUISISI DATA \textit{ELECTRONIC NOSE} (\textit{E-NOSE}) DAN\\
+    OTA (\textit{OVER-THE-AIR}) \textit{FIRMWARE UPDATE} BERBASIS ESP32-S3\\
+    DAN THINGSBOARD \textit{CLOUD}\par}
 
     \vspace{0.8cm}
 
-    % Logo resmi ITS (diambil dari its.ac.id) - unggah berkas
-    % "logo-its-1.png" ke root project Overleaf ini, pastikan namanya
-    % persis sama (tanpa embel-embel ekstensi tambahan seperti .jpg).
-    \includegraphics[width=3cm]{logo-its-1.png}
-
+    % Logo resmi ITS
+    \includegraphics[width=3cm]{logoits.png}
     \vspace{0.8cm}
 
     {Dosen Pengampu:\\
-    \bfseries Akhmad Ibnu Hija, S.T., M.T.\par}
+    \bfseries Ahmad Radhy, S.Si., M.Si\par}
 
     \vspace{0.8cm}
 
-    {Disusun Oleh Kelompok 13:\par}
+    {Disusun Oleh Kelompok 7:\par}
     \vspace{4pt}
 
     \begin{tabular}{ll}
-        \bfseries \underline{\hspace{5cm}} & \underline{\hspace{3cm}} \\[6pt]
-        \bfseries \underline{\hspace{5cm}} & \underline{\hspace{3cm}} \\[6pt]
-        \bfseries \underline{\hspace{5cm}} & \underline{\hspace{3cm}} \\[6pt]
-        \bfseries \underline{\hspace{5cm}} & \underline{\hspace{3cm}} \\
+        \bfseries Faris Ahmad Holili & 2042241028 \\[6pt]
+        \bfseries Yusuf Febri Andrian & 2042241043 \\[6pt]
+        \bfseries Mohammad Eka Jauhar Ismail & 2042241054 \\[6pt]
+        \bfseries Reksa Putra Armediansyah & 2042241126 \\
     \end{tabular}
 
     \vfill
@@ -113,7 +115,7 @@
     FAKULTAS VOKASI\\
     INSTITUT TEKNOLOGI SEPULUH NOPEMBER\\
     SURABAYA\\
-    2025\par}
+    2026\par}
     \vspace*{0.5cm}
 
 \end{titlepage}
@@ -131,94 +133,94 @@
 Kopi merupakan komoditas dengan variasi jenis dan profil aroma yang sangat beragam,
 sehingga identifikasi jenis/varietas kopi secara objektif menjadi topik yang relevan
 untuk diteliti. Salah satu pendekatan yang dapat digunakan adalah \textit{electronic
-nose} (E-Nose), yaitu sistem berbasis array sensor gas yang meniru cara kerja indera
+nose} (\textit{E-Nose}), yaitu sistem berbasis \textit{array} sensor gas yang meniru cara kerja indera
 penciuman manusia untuk mengenali profil aroma suatu zat.
 
-Proyek \textbf{Coffee E-Nose} ini mengembangkan sistem akuisisi data berbasis
+Proyek \textbf{Coffee \textit{E-Nose}} ini mengembangkan sistem akuisisi data berbasis
 mikrokontroler ESP32-S3 yang membaca sinyal dari delapan kanal sensor gas melalui dua
 buah ADC eksternal ADS1115, serta sensor suhu dan kelembapan DHT22 sebagai data
 lingkungan pendukung. Data yang diakuisisi dikirim secara \textit{real-time} melalui
-protokol MQTT ke platform IoT cloud \textbf{ThingsBoard}, sekaligus dicatat secara lokal
+protokol MQTT ke platform IoT \textit{cloud} \textbf{ThingsBoard}, sekaligus dicatat secara lokal
 melalui antarmuka serial untuk keperluan pencatatan data mentah.
 
 Karena perangkat direncanakan digunakan pada beberapa sesi pengambilan data yang
-terpisah, kebutuhan untuk dapat memperbarui firmware device dari jarak jauh tanpa harus
+terpisah, kebutuhan untuk dapat memperbarui \textit{firmware device} dari jarak jauh tanpa harus
 membongkar/mencolok ulang kabel USB menjadi penting. Oleh karena itu, sistem ini juga
-mengimplementasikan mekanisme \textbf{OTA (Over-The-Air) firmware update} yang
-memanfaatkan fitur bawaan ThingsBoard untuk mendistribusikan berkas firmware baru ke
-device secara nirkabel.
+mengimplementasikan mekanisme \textbf{OTA (\textit{Over-The-Air}) \textit{firmware update}} yang
+memanfaatkan fitur bawaan ThingsBoard untuk mendistribusikan berkas \textit{firmware} baru ke
+\textit{device} secara nirkabel.
 
 \section{Tujuan}
 \begin{enumerate}[label=\arabic*.]
-    \item Mengimplementasikan firmware akuisisi data sensor gas array (8 kanal) dan
+    \item Mengimplementasikan \textit{firmware} akuisisi data sensor gas \textit{array} (8 kanal) dan
     sensor lingkungan (DHT22) pada mikrokontroler ESP32-S3 menggunakan bahasa Rust.
     \item Mengimplementasikan konektivitas WiFi dan protokol MQTT untuk mengirimkan data
-    telemetri secara \textit{real-time} ke ThingsBoard Cloud.
-    \item Mengimplementasikan dan menguji mekanisme OTA firmware update end-to-end,
-    mulai dari proses \textit{assign} firmware di ThingsBoard hingga device berhasil
-    mengunduh, memverifikasi, dan menjalankan firmware baru.
+    telemetri secara \textit{real-time} ke ThingsBoard \textit{Cloud}.
+    \item Mengimplementasikan dan menguji mekanisme OTA \textit{firmware update} \textit{end-to-end},
+    mulai dari proses \textit{assign firmware} di ThingsBoard hingga \textit{device} berhasil
+    mengunduh, memverifikasi, dan menjalankan \textit{firmware} baru.
     \item Mendokumentasikan kendala teknis yang ditemukan selama pengujian OTA di
-    perangkat keras nyata beserta solusi yang diterapkan.
+    perangkat keras (\textit{hardware}) nyata beserta solusi yang diterapkan.
 \end{enumerate}
 
 \section{Ruang Lingkup}
-Laporan ini berfokus pada pengembangan sisi \textbf{firmware} (embedded software) dan
-mekanisme \textbf{OTA update}-nya. Pipeline pengolahan data lanjutan (ekstraksi fitur,
-pelatihan model klasifikasi machine learning) berada di luar cakupan laporan ini dan
+Laporan ini berfokus pada pengembangan sisi \textbf{\textit{firmware}} (\textit{embedded software}) dan
+mekanisme \textbf{OTA \textit{update}}-nya. \textit{Pipeline} pengolahan data lanjutan (ekstraksi fitur,
+pelatihan model klasifikasi \textit{machine learning}) berada di luar cakupan laporan ini dan
 ditangani secara terpisah pada folder \texttt{04\_features/} dan \texttt{05\_models/}
 dalam struktur repositori proyek.
 
 % =======================================================
 \chapter{Dasar Teori}
 
-\section{Electronic Nose dan Array Sensor Gas}
-Sistem E-Nose pada proyek ini menggunakan delapan kanal sensor gas semikonduktor logam
-oksida (MOS), yaitu MQ-3, MQ-6, MQ-7, MQ-135, TGS2600, TGS2602, TGS2611, dan TGS2620.
+\section{\textit{Electronic Nose} dan \textit{Array} Sensor Gas}
+Sistem \textit{E-Nose} pada proyek ini menggunakan delapan kanal sensor gas semikonduktor \textit{metal oxide}
+(MOS), yaitu MQ-3, MQ-6, MQ-7, MQ-135, TGS2600, TGS2602, TGS2611, dan TGS2620.
 Setiap sensor memiliki sensitivitas berbeda terhadap senyawa volatil tertentu (misalnya
 alkohol, gas mudah terbakar, senyawa organik volatil), sehingga kombinasi keluaran
 kedelapan sensor membentuk suatu \textit{fingerprint} aroma yang dapat dibedakan antar
 sampel kopi.
 
-Karena keluaran sensor berupa sinyal analog, dibutuhkan ADC (Analog-to-Digital
-Converter) beresolusi tinggi. Digunakan dua modul \textbf{ADS1115} (ADC 16-bit,
+Karena keluaran sensor berupa sinyal analog, dibutuhkan ADC (\textit{Analog-to-Digital
+Converter}) beresolusi tinggi. Digunakan dua modul \textbf{ADS1115} (ADC 16-bit,
 antarmuka I2C, 4 kanal per modul) dengan alamat I2C berbeda (\texttt{0x48} dan
-\texttt{0x49}) sehingga total 8 kanal sensor dapat dibaca melalui satu bus I2C yang
+\texttt{0x49}) sehingga total 8 kanal sensor dapat dibaca melalui satu \textit{bus} I2C yang
 sama (SDA pada GPIO8, SCL pada GPIO9). Sensor DHT22 digunakan untuk mencatat suhu dan
 kelembapan ruangan sebagai variabel kontrol, terhubung pada GPIO10.
 
-\section{ESP32-S3 dan Firmware Berbasis Rust}
+\section{ESP32-S3 dan \textit{Firmware} Berbasis Rust}
 ESP32-S3 dipilih sebagai mikrokontroler utama karena memiliki konektivitas WiFi
-bawaan, memori yang cukup untuk buffer komunikasi MQTT, serta dukungan dua slot
-partisi OTA. Firmware ditulis dalam bahasa \textbf{Rust} menggunakan \textit{crate}
-\texttt{esp-hal} (Hardware Abstraction Layer resmi untuk keluarga chip Espressif) dan
-runtime asinkron \texttt{embassy}, yang memungkinkan beberapa \textit{task}
+bawaan, memori \textit{buffer} yang cukup untuk komunikasi MQTT, serta dukungan dua slot
+partisi OTA. \textit{Firmware} ditulis dalam bahasa \textbf{Rust} menggunakan \textit{crate}
+\texttt{esp-hal} (\textit{Hardware Abstraction Layer} resmi untuk keluarga \textit{chip} Espressif) dan
+\textit{runtime} asinkron \texttt{embassy}, yang memungkinkan beberapa \textit{task}
 (pembacaan sensor, komunikasi MQTT, dan lain-lain) berjalan secara konkuren tanpa RTOS
-tradisional.
+(\textit{Real-Time Operating System}) tradisional.
 
 \section{Protokol MQTT dan Platform ThingsBoard}
-MQTT (Message Queuing Telemetry Transport) adalah protokol \textit{publish-subscribe}
+MQTT (\textit{Message Queuing Telemetry Transport}) adalah protokol \textit{publish-subscribe}
 ringan yang umum digunakan pada sistem IoT. \textbf{ThingsBoard} adalah platform IoT
-\textit{cloud} yang menyediakan broker MQTT, dashboard visualisasi, penyimpanan
-\textit{attribute} (client-side dan shared/server-side), serta fitur manajemen OTA
-firmware update bawaan yang digunakan langsung pada proyek ini tanpa perlu membangun
-server OTA sendiri.
+\textit{cloud} yang menyediakan \textit{broker} MQTT, \textit{dashboard} visualisasi, penyimpanan
+\textit{attribute} (\textit{client-side} dan \textit{shared/server-side}), serta fitur manajemen OTA
+\textit{firmware update} bawaan yang digunakan langsung pada proyek ini tanpa perlu membangun
+\textit{server} OTA sendiri.
 
-\section{Mekanisme OTA (Over-The-Air) Firmware Update}
-Konsep OTA update pada ESP32 (dan chip Espressif pada umumnya) mengandalkan skema
-\textbf{dual-partition}: terdapat dua partisi aplikasi (\texttt{ota\_0} dan
-\texttt{ota\_1}) berukuran sama, dan device hanya menjalankan salah satunya pada satu
-waktu. Firmware baru selalu ditulis ke partisi yang \textit{sedang tidak aktif},
+\section{Mekanisme OTA (\textit{Over-The-Air}) \textit{Firmware Update}}
+Konsep OTA \textit{update} pada ESP32 (dan \textit{chip} Espressif pada umumnya) mengandalkan skema
+\textbf{\textit{dual-partition}}: terdapat dua partisi aplikasi (\texttt{ota\_0} dan
+\texttt{ota\_1}) berukuran sama, dan \textit{device} hanya menjalankan salah satunya pada satu
+waktu. \textit{Firmware} baru selalu ditulis ke partisi yang sedang tidak aktif,
 sehingga apabila proses unduh gagal di tengah jalan, partisi yang sedang berjalan
-tidak tersentuh sama sekali dan device tetap dapat berfungsi normal. Setelah data
-firmware baru selesai diunduh dan diverifikasi (biasanya melalui \textit{checksum}
+tidak tersentuh sama sekali dan \textit{device} tetap dapat berfungsi normal. Setelah data
+\textit{firmware} baru selesai diunduh dan diverifikasi (biasanya melalui \textit{checksum}
 CRC32), \textit{bootloader} diarahkan untuk mem-\textit{boot} dari partisi baru
-tersebut pada reboot berikutnya.
+tersebut pada \textit{reboot} berikutnya.
 
-Pada proyek ini, mekanisme low-level penulisan ke partisi OTA ditangani oleh
-\textit{crate} Rust \texttt{esp-hal-ota}, sedangkan protokol pertukaran data firmware
-antara device dan ThingsBoard mengikuti protokol resmi ThingsBoard berbasis topik MQTT
+Pada proyek ini, mekanisme \textit{low-level} penulisan ke partisi OTA ditangani oleh
+\textit{crate} Rust \texttt{esp-hal-ota}, sedangkan protokol pertukaran data \textit{firmware}
+antara \textit{device} dan ThingsBoard mengikuti protokol resmi ThingsBoard berbasis topik MQTT
 \texttt{v1/devices/me/attributes} (untuk metadata versi) dan
-\texttt{v2/fw/request/\{id\}/chunk/\{n\}} (untuk mengunduh firmware per-\textit{chunk}).
+\texttt{v2/fw/request/\{id\}/chunk/\{n\}} (untuk mengunduh \textit{firmware} per-\textit{chunk}).
 
 % =======================================================
 \chapter{Metodologi dan Implementasi Sistem}
@@ -231,30 +233,30 @@ Secara umum, arsitektur sistem terdiri atas tiga lapisan:
     format CSV setiap 1 detik.
     \item \textbf{Lapisan konektivitas} -- ESP32-S3 terhubung ke jaringan WiFi lokal,
     kemudian membentuk koneksi MQTT ke \texttt{thingsboard.cloud} untuk mengirim
-    telemetri dan menerima perintah/atribut (termasuk metadata OTA).
-    \item \textbf{Lapisan manajemen firmware (OTA)} -- ThingsBoard menyimpan paket
-    firmware pada \textit{Packages repository}, yang dapat di-\textit{assign} ke
-    device tertentu. Device secara otomatis mendeteksi penetapan (\textit{assignment})
+    telemetri dan menerima perintah/\textit{attribute} (termasuk metadata OTA).
+    \item \textbf{Lapisan manajemen \textit{firmware} (OTA)} -- ThingsBoard menyimpan paket
+    \textit{firmware} pada \textit{Packages repository}, yang dapat di-\textit{assign} ke
+    \textit{device} tertentu. \textit{Device} secara otomatis mendeteksi penetapan (\textit{assignment})
     tersebut dan mengunduhnya bila versinya berbeda dari yang sedang berjalan.
 \end{enumerate}
 
-\section{Perangkat Keras}
+\section{Perangkat Keras (\textit{Hardware})}
 \begin{itemize}
-    \item Mikrokontroler: ESP32-S3 (flash 16MB)
+    \item Mikrokontroler: ESP32-S3 (\textit{flash} 16 MB)
     \item ADC eksternal: 2x ADS1115 (I2C, alamat \texttt{0x48} dan \texttt{0x49})
     \item Sensor gas: MQ-3, MQ-6, MQ-7, MQ-135, TGS2600, TGS2602, TGS2611, TGS2620
     (total 8 kanal, terbagi merata pada 2 modul ADS1115)
     \item Sensor lingkungan: DHT22 (suhu \& kelembapan), pada GPIO10
-    \item Bus I2C: SDA = GPIO8, SCL = GPIO9
+    \item \textit{Bus} I2C: SDA = GPIO8, SCL = GPIO9
 \end{itemize}
 
-\section{Struktur Partisi Flash}
-Agar mendukung OTA, tabel partisi flash dirancang dengan dua slot aplikasi seperti
+\section{Struktur Partisi \textit{Flash}}
+Agar mendukung OTA, tabel partisi \textit{flash} dirancang dengan dua slot aplikasi seperti
 diperlihatkan pada Tabel~\ref{tab:partisi}.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
-\caption{Tabel partisi flash ESP32-S3 (\texttt{partitions.csv})}
+\caption{Tabel partisi \textit{flash} ESP32-S3 (\texttt{partitions.csv})}
 \label{tab:partisi}
 \begin{tabular}{|l|l|l|l|l|}
 \hline
@@ -270,45 +272,45 @@ ota\_1   & app  & ota\_1 & 0x1A0000 & 1.5 MB \\
 \end{table}
 
 Partisi \texttt{ota\_0} dan \texttt{ota\_1} masing-masing berukuran 1,5 MB, cukup
-untuk menampung ukuran biner firmware hasil kompilasi (kurang lebih 600 KB pada
+untuk menampung ukuran biner \textit{firmware} hasil kompilasi (kurang lebih 600 KB pada
 proyek ini), dengan ruang cadangan untuk pengembangan fitur berikutnya.
 
 \section{Tahapan Pengembangan}
-Pengembangan firmware dilakukan secara bertahap dan iteratif berdasarkan riwayat
-commit pada repositori proyek. Tahapan utamanya adalah sebagai berikut.
+Pengembangan \textit{firmware} dilakukan secara bertahap dan iteratif berdasarkan riwayat
+\textit{commit} pada repositori proyek. Tahapan utamanya adalah sebagai berikut.
 
 \subsection{Fase 1 -- Inisialisasi Proyek}
-Struktur folder proyek, skeleton firmware, serta konfigurasi awal WiFi dan MQTT
-disiapkan. Konfigurasi kredensial (SSID, password, host ThingsBoard, dan token
-akses) awalnya dicoba melalui environment variable, kemudian dipindahkan ke berkas
+Struktur folder proyek, \textit{skeleton firmware}, serta konfigurasi awal WiFi dan MQTT
+disiapkan. Konfigurasi kredensial (SSID, \textit{password}, \textit{host} ThingsBoard, dan token
+akses) awalnya dicoba melalui \textit{environment variable}, kemudian dipindahkan ke berkas
 teks \texttt{wifi\_config.txt} yang di-\textit{gitignore} agar kredensial tidak
 ikut ter-\textit{commit} ke repositori publik.
 
 \subsection{Fase 2 -- Protokol Akuisisi 8 Sensor}
 Mengikuti instruksi dosen pengampu, protokol akuisisi diperbarui menjadi 8 kanal
 sensor gas melalui dua modul ADS1115, dengan 10 kali percobaan pengambilan data per
-sesi. Bug kritis pada komunikasi UART yang menyebabkan firmware \textit{hang} total
+sesi. \textit{Bug} kritis pada komunikasi UART yang menyebabkan \textit{firmware hang} total
 juga ditemukan dan diperbaiki pada fase ini, disertai penambahan pencatatan
-(\textit{logging}) lokal sebagai cadangan apabila koneksi cloud terputus.
+(\textit{logging}) lokal sebagai cadangan apabila koneksi \textit{cloud} terputus.
 
-\subsection{Fase 3 -- Rewrite Akuisisi Sensor Murni}
-Firmware ditulis ulang agar berfokus murni pada akuisisi sensor sesuai pemetaan pin
+\subsection{Fase 3 -- \textit{Rewrite} Akuisisi Sensor Murni}
+\textit{Firmware} ditulis ulang agar berfokus murni pada akuisisi sensor sesuai pemetaan \textit{pin}
 dan format keluaran yang ditetapkan pada dokumen instruksi resmi, termasuk perbaikan
-pin DHT22 (dari asumsi awal GPIO4 menjadi GPIO10 sesuai referensi repositori acuan)
-dan penambahan pemindaian (\textit{scan}) bus I2C saat boot untuk memverifikasi
-keberadaan perangkat pada bus.
+\textit{pin} DHT22 (dari asumsi awal GPIO4 menjadi GPIO10 sesuai referensi repositori acuan)
+dan penambahan pemindaian (\textit{scan}) \textit{bus} I2C saat \textit{boot} untuk memverifikasi
+keberadaan perangkat pada \textit{bus}.
 
 \subsection{Fase 4 -- Penggabungan Ulang Konektivitas dan OTA}
 Setelah modul akuisisi sensor stabil, fungsi WiFi/MQTT digabungkan kembali ke dalam
-firmware yang sama, disusul dengan integrasi ulang mekanisme OTA firmware update
+\textit{firmware} yang sama, disusul dengan integrasi ulang mekanisme OTA \textit{firmware update}
 menggunakan \textit{crate} \texttt{esp-hal-ota} beserta tabel partisi khusus OTA.
 
-\subsection{Fase 5 -- Debugging OTA End-to-End di Perangkat Keras}
+\subsection{Fase 5 -- \textit{Debugging} OTA \textit{End-to-End} di Perangkat Keras}
 Fase ini merupakan fase pengujian paling intensif, mencakup penemuan dan perbaikan
 tiga kendala signifikan yang dibahas secara rinci pada Bab~\ref{ch:pengujian}.
 
-\section{Implementasi Firmware Akuisisi Sensor}
-Firmware membaca kedelapan kanal sensor gas dan data DHT22 setiap 1 detik, lalu
+\section{Implementasi \textit{Firmware} Akuisisi Sensor}
+\textit{Firmware} membaca kedelapan kanal sensor gas dan data DHT22 setiap 1 detik, lalu
 mencetak hasilnya ke antarmuka serial dalam format CSV agar mudah diproses lebih
 lanjut:
 
@@ -321,13 +323,13 @@ ADS1115 pada mode \textit{full-scale range} $\pm4{,}096$ V, sehingga keluaran le
 mudah diinterpretasikan tanpa perlu konversi manual di sisi pengolahan data.
 
 \section{Implementasi Konektivitas WiFi dan MQTT}
-Setelah koneksi WiFi berhasil dan alamat IP diperoleh melalui DHCP, firmware
+Setelah koneksi WiFi berhasil dan alamat IP diperoleh melalui DHCP, \textit{firmware}
 membentuk koneksi MQTT ke \texttt{thingsboard.cloud:1883} menggunakan token akses
-device sebagai kredensial (\textit{username}). Setelah terkoneksi, firmware:
+\textit{device} sebagai kredensial (\textit{username}). Setelah terkoneksi, \textit{firmware}:
 \begin{enumerate}[label=(\alph*)]
     \item Men-\textit{subscribe} topik \texttt{v1/devices/me/attributes} untuk
-    menerima pembaruan atribut secara \textit{real-time}.
-    \item Melaporkan versi firmware yang sedang berjalan (\texttt{current\_fw\_title},
+    menerima pembaruan \textit{attribute} secara \textit{real-time}.
+    \item Melaporkan versi \textit{firmware} yang sedang berjalan (\texttt{current\_fw\_title},
     \texttt{current\_fw\_version}) sebagai \textit{client attribute}.
     \item Meminta (\textit{request}) nilai \textit{shared attribute} terkini terkait
     OTA (\texttt{fw\_title}, \texttt{fw\_version}, \texttt{fw\_size},
@@ -338,34 +340,34 @@ device sebagai kredensial (\textit{username}). Setelah terkoneksi, firmware:
     koneksi MQTT tidak terputus akibat \textit{keep-alive timeout}.
 \end{enumerate}
 
-Apabila koneksi MQTT terputus, firmware secara otomatis mencoba menghubungkan
-kembali setelah jeda 3 detik, sementara \textit{task} akuisisi sensor dan pencatatan
+Apabila koneksi MQTT terputus, \textit{firmware} secara otomatis mencoba menghubungkan
+kembali (\textit{reconnect}) setelah jeda 3 detik, sementara \textit{task} akuisisi sensor dan pencatatan
 lokal tetap berjalan tanpa terganggu.
 
-\section{Implementasi OTA Firmware Update}
+\section{Implementasi OTA \textit{Firmware Update}}
 Alur lengkap mekanisme OTA yang diimplementasikan adalah sebagai berikut:
 
 \begin{enumerate}[label=\arabic*.]
-    \item Device melaporkan versi firmware yang sedang berjalan sebagai
+    \item \textit{Device} melaporkan versi \textit{firmware} yang sedang berjalan sebagai
     \textit{client attribute} (\texttt{current\_fw\_title} / \texttt{current\_fw\_version}).
-    \item Device meminta nilai \textit{shared attribute} terkait firmware yang
+    \item \textit{Device} meminta nilai \textit{shared attribute} terkait \textit{firmware} yang
     ditetapkan (\textit{assigned}) untuknya di ThingsBoard.
-    \item Device membandingkan versi yang ditetapkan dengan versi yang sedang
+    \item \textit{Device} membandingkan versi yang ditetapkan dengan versi yang sedang
     berjalan. Apabila sama, proses dihentikan (\textit{skip}); apabila berbeda,
     proses unduh dimulai.
-    \item Firmware diunduh secara bertahap per-\textit{chunk} berukuran 4096 byte
+    \item \textit{Firmware} diunduh secara bertahap per-\textit{chunk} berukuran 4096 \textit{byte}
     melalui topik \texttt{v2/fw/request/\{id\}/chunk/\{n\}}, dan setiap \textit{chunk}
     yang diterima langsung ditulis ke partisi OTA yang tidak aktif menggunakan
-    \texttt{esp-hal-ota}.
+    \textit{crate} \texttt{esp-hal-ota}.
     \item Nilai CRC32 dihitung secara independen atas seluruh data yang diunduh, lalu
     dibandingkan dengan nilai \textit{checksum} yang dikirim ThingsBoard.
-    \item Apabila \textit{checksum} cocok, data firmware di-\textit{flush} secara
-    final ke flash dan device melakukan \textit{restart} untuk berpindah menjalankan
-    firmware baru dari partisi yang baru saja ditulis.
+    \item Apabila \textit{checksum} cocok, data \textit{firmware} di-\textit{flush} secara
+    final ke \textit{flash} dan \textit{device} melakukan \textit{restart} untuk berpindah menjalankan
+    \textit{firmware} baru dari partisi yang baru saja ditulis.
 \end{enumerate}
 
 Potongan kode berikut menunjukkan bagian pengecekan versi yang ditambahkan untuk
-mencegah pengunduhan ulang firmware yang sama (dibahas lebih lanjut pada
+mencegah pengunduhan ulang \textit{firmware} yang sama (dibahas lebih lanjut pada
 Bab~\ref{ch:pengujian}):
 
 \begin{lstlisting}[language=Rust,caption={Pengecekan versi sebelum memulai unduhan OTA (\texttt{main.rs})}]
@@ -388,18 +390,27 @@ if let Some(update) = parse_fw_update(text) {
 }
 \end{lstlisting}
 
+Implementasi lengkap struktur program \textit{firmware} pada berkas \texttt{main.rs} diperlihatkan pada Gambar~\ref{fig:ss_main_rs}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{main rs.png}
+    \caption{Tangkapan layar kode \textit{firmware} utama (\texttt{main.rs}) berbasis Rust dan Embassy.}
+    \label{fig:ss_main_rs}
+\end{figure}
+
 % =======================================================
 \chapter{Pengujian dan Hasil}
 \label{ch:pengujian}
 
-Pengujian OTA dilakukan langsung pada perangkat keras (bukan simulasi), dengan cara
-meng-\textit{assign} paket firmware baru ke device melalui dashboard ThingsBoard dan
+Pengujian OTA dilakukan langsung pada perangkat keras (\textit{hardware}, bukan simulasi), dengan cara
+meng-\textit{assign} paket \textit{firmware} baru ke \textit{device} melalui \textit{dashboard} ThingsBoard dan
 mengamati proses unduhan melalui \textit{serial monitor} (\texttt{espflash monitor}).
 Pada iterasi pengujian pertama, ditemukan tiga kendala signifikan yang harus
 diselesaikan sebelum OTA dapat berfungsi secara andal. Ringkasannya diperlihatkan
 pada Tabel~\ref{tab:kendala}.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \caption{Ringkasan kendala OTA yang ditemukan dan solusinya}
 \label{tab:kendala}
@@ -410,35 +421,35 @@ pada Tabel~\ref{tab:kendala}.
 1 &
 Verifikasi gagal / \textit{checksum} CRC32 tidak cocok &
 ThingsBoard mengirim nilai \textit{checksum} \texttt{fw\_checksum} dengan urutan
-byte (\textit{endianness}) terbalik dibanding hasil perhitungan CRC32 di firmware &
-Membalik urutan byte nilai \textit{checksum} menggunakan \texttt{.swap\_bytes()}
+\textit{byte} (\textit{endianness}) terbalik dibanding hasil perhitungan CRC32 di \textit{firmware} &
+Membalik urutan \textit{byte} nilai \textit{checksum} menggunakan \texttt{.swap\_bytes()}
 sebelum dibandingkan \\
 \hline
 2 &
-Device \textit{offline} (\texttt{BadUserNameOrPassword}) setelah OTA berhasil
-dan reboot &
-Paket firmware OTA yang di-\textit{build} menyertakan token akses MQTT yang
+\textit{Device offline} (\texttt{BadUserNameOrPassword}) setelah OTA berhasil
+dan \textit{reboot} &
+Paket \textit{firmware} OTA yang di-\textit{build} menyertakan token akses MQTT yang
 berbeda (kedaluwarsa) dari token yang sedang aktif di ThingsBoard, karena
-\texttt{wifi\_config.txt} sudah berubah sejak firmware tersebut dikompilasi &
-Membangun ulang (\textit{rebuild}) paket firmware OTA menggunakan
+\texttt{wifi\_config.txt} sudah berubah sejak \textit{firmware} tersebut dikompilasi &
+Membangun ulang (\textit{rebuild}) paket \textit{firmware} OTA menggunakan
 \texttt{wifi\_config.txt} yang terbaru sebelum diunggah sebagai paket OTA baru \\
 \hline
 3 &
-Firmware yang sama diunduh ulang terus-menerus setiap device melakukan
+\textit{Firmware} yang sama diunduh ulang terus-menerus setiap \textit{device} melakukan
 \textit{reconnect} MQTT (\textit{infinite loop}) &
-Firmware tidak pernah membandingkan versi firmware yang ditetapkan
-(\textit{assigned}) dengan versi yang sedang berjalan -- setiap menerima atribut
+\textit{Firmware} tidak pernah membandingkan versi \textit{firmware} yang ditetapkan
+(\textit{assigned}) dengan versi yang sedang berjalan -- setiap menerima \textit{attribute}
 \texttt{fw\_title}/\texttt{fw\_version}, unduhan langsung dimulai tanpa syarat &
-Menambahkan pengecekan kesamaan judul dan versi firmware sebelum memulai proses
+Menambahkan pengecekan kesamaan judul dan versi \textit{firmware} sebelum memulai proses
 unduh; unduhan di-\textit{skip} apabila versi sudah sama \\
 \hline
 \end{tabular}
 \end{table}
 
-\section{Verifikasi Checksum CRC32}
-Nilai CRC32 dihitung secara manual dan independen di sisi firmware atas seluruh
+\section{Verifikasi \textit{Checksum} CRC32}
+Nilai CRC32 dihitung secara manual dan independen di sisi \textit{firmware} atas seluruh
 data yang diunduh, kemudian dibandingkan dengan nilai target dari ThingsBoard.
-Contoh luaran log yang menunjukkan proses ini berhasil:
+Contoh luaran \textit{log} yang menunjukkan proses ini berhasil:
 
 \begin{lstlisting}[caption={Cuplikan log verifikasi CRC32 yang berhasil}]
 INFO - OTA: chunk 151 diterima (1024 bytes, total 619520/619520 bytes)
@@ -448,19 +459,19 @@ INFO - OTA sukses, reboot...
 \end{lstlisting}
 
 \section{Verifikasi Token Kredensial}
-Untuk memastikan paket firmware yang diunggah ke ThingsBoard benar-benar
-menggunakan kredensial (token akses MQTT) yang aktif, dilakukan pemeriksaan string
+Untuk memastikan paket \textit{firmware} yang diunggah ke ThingsBoard benar-benar
+menggunakan kredensial (token akses MQTT) yang aktif, dilakukan pemeriksaan \textit{string}
 biner yang tertanam pada berkas \texttt{.bin} hasil kompilasi sebelum diunggah,
-serta verifikasi kesamaan byte-per-byte antara berkas lokal dan berkas yang
+serta verifikasi kesamaan \textit{byte-per-byte} antara berkas lokal dan berkas yang
 tersimpan di ThingsBoard (dengan mengunduh kembali paket yang telah diunggah dan
 membandingkannya). Langkah ini terbukti efektif mendeteksi kasus ketidaksesuaian
 token pada iterasi pengujian sebelumnya.
 
-\section{Verifikasi Penghentian Loop Unduhan}
+\section{Verifikasi Penghentian \textit{Loop} Unduhan}
 Setelah perbaikan pada Tabel~\ref{tab:kendala} poin 3 diterapkan, pengujian ulang
-menunjukkan bahwa device berhenti mengunduh ulang firmware yang versinya sama:
+menunjukkan bahwa \textit{device} berhenti mengunduh ulang \textit{firmware} yang versinya sama:
 
-\begin{lstlisting}[caption={Log setelah perbaikan -- unduhan otomatis di-\textit{skip}}]
+\begin{lstlisting}[caption={Log setelah perbaikan -- unduhan otomatis di-skip}]
 INFO - MQTT connected ke ThingsBoard
 INFO - OTA: coffee-enose v2.1.2 sudah versi yang jalan sekarang,
        skip download
@@ -468,35 +479,44 @@ INFO - OTA: coffee-enose v2.1.2 sudah versi yang jalan sekarang,
 
 \section{Hasil Akhir Pengujian}
 Setelah ketiga perbaikan pada Tabel~\ref{tab:kendala} diterapkan, mekanisme OTA
-terverifikasi berjalan secara utuh (\textit{end-to-end}) pada perangkat keras
-sebagai berikut: penetapan (\textit{assignment}) firmware baru di ThingsBoard
-$\rightarrow$ device mendeteksi perbedaan versi $\rightarrow$ unduhan berjalan
-per-\textit{chunk} (151 \textit{chunk}, total 619.520 byte) $\rightarrow$ verifikasi
-CRC32 cocok $\rightarrow$ device melakukan \textit{restart} $\rightarrow$ device
+terverifikasi berjalan secara utuh (\textit{end-to-end}) pada perangkat keras (\textit{hardware})
+sebagai berikut: penetapan (\textit{assignment}) \textit{firmware} baru di ThingsBoard
+$\rightarrow$ \textit{device} mendeteksi perbedaan versi $\rightarrow$ unduhan berjalan
+per-\textit{chunk} (151 \textit{chunk}, total 619.520 \textit{byte}) $\rightarrow$ verifikasi
+CRC32 cocok $\rightarrow$ \textit{device} melakukan \textit{restart} $\rightarrow$ \textit{device}
 kembali terhubung ke MQTT dengan kredensial yang tetap valid $\rightarrow$ pada
 percobaan koneksi berikutnya, unduhan tidak terulang karena versi telah sesuai.
+
+Tampilan antarmuka \textit{dashboard} ThingsBoard \textit{Cloud} saat pemantauan telemetri dan status OTA \textit{device} dapat dilihat pada Gambar~\ref{fig:dashboard_thingsboard}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{thingboard.png}
+    \caption{Tampilan \textit{Dashboard} ThingsBoard \textit{Cloud} untuk pemantauan data telemetri dan status OTA \textit{firmware update}.}
+    \label{fig:dashboard_thingsboard}
+\end{figure}
 
 % =======================================================
 \chapter{Kendala dan Pembelajaran}
 
-\section{Konvensi Byte Order yang Tidak Terdokumentasi}
+\section{Konvensi \textit{Byte Order} yang Tidak Terdokumentasi}
 Salah satu pembelajaran penting dari proyek ini adalah pentingnya melakukan
 verifikasi empiris terhadap asumsi format data dari pihak ketiga (dalam hal ini,
-representasi byte dari nilai \textit{checksum} yang dikirim ThingsBoard), karena
+representasi \textit{byte} dari nilai \textit{checksum} yang dikirim ThingsBoard), karena
 perbedaan konvensi semacam ini tidak selalu terdokumentasikan secara eksplisit pada
 dokumentasi resmi.
 
-\section{Konsistensi Kredensial pada Proses Build}
-Karena kredensial WiFi/MQTT ditanamkan langsung ke dalam biner firmware saat proses
-kompilasi (\textit{compile-time embedding}), setiap kali paket firmware baru akan
+\section{Konsistensi Kredensial pada Proses \textit{Build}}
+Karena kredensial WiFi/MQTT ditanamkan langsung ke dalam biner \textit{firmware} saat proses
+kompilasi (\textit{compile-time embedding}), setiap kali paket \textit{firmware} baru akan
 diunggah sebagai paket OTA, perlu dipastikan bahwa proses \textit{build} dilakukan
 menggunakan berkas konfigurasi kredensial (\texttt{wifi\_config.txt}) yang paling
-mutakhir, untuk menghindari device kehilangan konektivitas setelah pembaruan.
+mutakhir, untuk menghindari \textit{device} kehilangan konektivitas setelah pembaruan.
 
-\section{Pentingnya Guard Perbandingan Versi}
+\section{Pentingnya \textit{Guard} Perbandingan Versi}
 Tanpa mekanisme pembanding versi yang eksplisit, sistem OTA rentan terhadap kondisi
-\textit{infinite loop} yang tidak perlu, membebani bandwidth dan siklus tulis flash
-memori device secara berulang. Penambahan pengecekan versi sederhana terbukti cukup
+\textit{infinite loop} yang tidak perlu, membebani \textit{bandwidth} dan siklus tulis \textit{flash}
+memori \textit{device} secara berulang. Penambahan pengecekan versi sederhana terbukti cukup
 untuk mencegah kondisi ini tanpa mengorbankan fungsi utama OTA.
 
 % =======================================================
@@ -504,20 +524,20 @@ untuk mencegah kondisi ini tanpa mengorbankan fungsi utama OTA.
 
 \section{Kesimpulan}
 \begin{enumerate}[label=\arabic*.]
-    \item Firmware akuisisi data sensor gas array (8 kanal via 2x ADS1115) dan
+    \item \textit{Firmware} akuisisi data sensor gas \textit{array} (8 kanal via 2x ADS1115) dan
     sensor lingkungan DHT22 pada ESP32-S3 berhasil diimplementasikan menggunakan
     Rust dengan \textit{framework} \texttt{esp-hal} dan \texttt{embassy}.
-    \item Konektivitas WiFi dan MQTT ke ThingsBoard Cloud berhasil diimplementasikan
+    \item Konektivitas WiFi dan MQTT ke ThingsBoard \textit{Cloud} berhasil diimplementasikan
     dengan mekanisme \textit{reconnect} otomatis dan pengiriman telemetri berkala.
-    \item Mekanisme OTA firmware update berhasil diimplementasikan dan diverifikasi
-    berfungsi secara \textit{end-to-end} pada perangkat keras nyata, setelah melalui
-    proses debugging tiga kendala teknis signifikan: perbedaan urutan byte
-    \textit{checksum} CRC32, inkonsistensi token kredensial pada paket OTA, dan
+    \item Mekanisme OTA \textit{firmware update} berhasil diimplementasikan dan diverifikasi
+    berfungsi secara \textit{end-to-end} pada perangkat keras (\textit{hardware}) nyata, setelah melalui
+    proses \textit{debugging} tiga kendala teknis signifikan: perbedaan urutan \textit{byte
+    checksum} CRC32, inkonsistensi token kredensial pada paket OTA, dan
     ketiadaan pengecekan versi yang menyebabkan \textit{infinite loop} unduhan.
     \item Sistem OTA yang dihasilkan bersifat aman terhadap kegagalan
     (\textit{fail-safe}): apabila proses unduh gagal di tengah jalan, partisi
-    firmware yang sedang aktif tidak tersentuh, sehingga device tetap dapat
-    beroperasi dengan firmware sebelumnya.
+    \textit{firmware} yang sedang aktif tidak tersentuh, sehingga \textit{device} tetap dapat
+    beroperasi dengan \textit{firmware} sebelumnya.
 \end{enumerate}
 
 \section{Saran}
@@ -528,12 +548,12 @@ untuk mencegah kondisi ini tanpa mengorbankan fungsi utama OTA.
     \item Melakukan kalibrasi masing-masing kanal sensor gas terhadap sampel
     referensi yang diketahui sebelum data digunakan untuk pelatihan model
     klasifikasi.
-    \item Menambahkan mekanisme \textit{rollback} otomatis pada firmware apabila
-    firmware hasil OTA gagal terhubung ke jaringan setelah sejumlah percobaan
-    tertentu, sebagai lapisan keamanan tambahan di luar verifikasi CRC32.
+    \item Menambahkan mekanisme \textit{rollback} otomatis pada \textit{firmware} apabila
+    \textit{firmware} hasil OTA gagal terhubung ke jaringan setelah sejumlah percobaan
+    tertentu, sebagai lapisan keamanan tambahan di luar verifikasi \textit{checksum} CRC32.
     \item Mendokumentasikan prosedur pembaruan OTA (termasuk langkah verifikasi
     \textit{checksum} dan token) sebagai panduan baku bagi anggota tim lain yang
-    akan melakukan pembaruan firmware di kemudian hari.
+    akan melakukan pembaruan \textit{firmware} di kemudian hari.
 \end{enumerate}
 
 % =======================================================
@@ -552,6 +572,7 @@ untuk mencegah kondisi ini tanpa mengorbankan fungsi utama OTA.
     \item Texas Instruments, \textit{ADS1115 16-Bit ADC Datasheet}.
     \item Aosong Electronics, \textit{DHT22 (AM2302) Digital Temperature and
     Humidity Sensor Datasheet}.
+    \item Repositori GitHub Proyek Coffee \textit{E-Nose} IoT, \url{https://github.com/yusuffebriii/Coffee-Enose-IoT-Project}.
 \end{enumerate}
 
 \end{document}
