@@ -11,17 +11,16 @@ di sisi komputer untuk ekstraksi fitur serta pelatihan model klasifikasi.
 
 ## Struktur Folder
 `​``
-01_raw_data/       Data mentah hasil akuisisi sensor (belum diolah)
-02_metadata/        Metadata sampel, label, kondisi pengujian
-03_processed_data/  Data hasil pembersihan/preprocessing
-04_features/        Fitur hasil ekstraksi dari data sensor
-05_models/           Model machine learning yang telah dilatih
-06_results/          Hasil evaluasi, metrik, figur
-07_notebooks/        Notebook eksplorasi dan analisis
-08_reports/          Laporan dan tulisan akhir
-firmware/            Firmware Rust untuk ESP32-S3 (akuisisi data via ADS1115/I2C)
-docs/                Dokumentasi tambahan
-`​``
+- `01_raw_data/` — Data mentah hasil akuisisi sensor (belum diolah)
+- `02_metadata/` — Metadata sampel, label, kondisi pengujian
+- `03_processed_data/` — Data hasil pembersihan/preprocessing
+- `04_features/` — Fitur hasil ekstraksi dari data sensor
+- `05_models/` — Model machine learning yang telah dilatih
+- `06_results/` — Hasil evaluasi, metrik, figur
+- `07_notebooks/` — Notebook eksplorasi dan analisis
+- `08_reports/` — Laporan dan tulisan akhir
+- `firmware/` — Firmware Rust untuk ESP32-S3 (akuisisi data via ADS1115/I2C)
+- `docs/` — Dokumentasi tambahan
 
 ## Firmware
 
